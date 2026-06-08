@@ -1,0 +1,170 @@
+### File Manager — REST API 测试文件
+### 使用 VS Code REST Client 插件 (humao.rest-client) 运行
+### 前置条件: 后端已启动 (cd backend && mvn quarkus:dev)
+
+# ---- 基础配置 ----
+@baseUrl = http://localhost:8080
+@apiFiles = {{baseUrl}}/api/files
+@apiTags = {{baseUrl}}/api/tags
+@apiBatch = {{baseUrl}}/api/batch
+@apiDupes = {{baseUrl}}/api/duplicates
+
+# ============================================================
+# 文件浏览与搜索
+# ============================================================
+
+### 1. 健康检查
+GET {{apiFiles}}/ping
+
+### 2. 浏览用户主目录
+GET {{apiFiles}}?path=C:\Users\34389
+
+### 3. 浏览桌面
+GET {{apiFiles}}?path=C:\Users\34389\Desktop
+
+### 4. 按文件名搜索
+GET {{apiFiles}}/search?q=pom.xml&type=NAME&page=0&size=20
+
+### 5. 按文件内容搜索
+GET {{apiFiles}}/search?q=FileManager&type=CONTENT&page=0&size=20
+
+### 6. 搜索 + 扩展名过滤
+GET {{apiFiles}}/search?q=.java&type=NAME&page=0&size=10
+
+# ============================================================
+# 文件操作
+# ============================================================
+
+### 7. 复制文件
+POST {{apiFiles}}/copy
+Content-Type: application/json
+
+{
+  "source": "E:/local/test/test.txt",
+  "destination": "E:/local/test/test_copy.txt"
+}
+
+### 8. 移动文件
+POST {{apiFiles}}/move
+Content-Type: application/json
+
+{
+  "source": "E:/local/test/test_copy.txt",
+  "destination": "E:/local/test/test_moved.txt"
+}
+
+### 9. 重命名文件
+PUT {{apiFiles}}/rename
+Content-Type: application/json
+
+{
+  "path": "E:/local/test/test_moved.txt",
+  "newName": "renamed.txt"
+}
+
+### 10. 删除文件
+DELETE {{apiFiles}}?path=E:/local/test/renamed.txt
+
+# ============================================================
+# 文件索引 (搜索前必须先索引)
+# ============================================================
+
+### 10a. 同步索引 (立即处理，适合小目录)
+POST {{apiFiles}}/index?path=E:/local/file-manager/backend/src
+
+### 10b. Kafka 异步索引 (提交到消息队列后台处理，适合大目录)
+POST {{apiFiles}}/index/async?path=E:/local/file-manager/backend/src
+
+# ============================================================
+# 标签管理
+# ============================================================
+
+### 11. 创建标签
+POST {{apiTags}}
+Content-Type: application/json
+
+{
+  "name": "Java Source",
+  "color": "#F59E0B",
+  "description": "Java 源代码文件"
+}
+
+### 12. 创建子标签
+POST {{apiTags}}
+Content-Type: application/json
+
+{
+  "name": "Quarkus Config",
+  "color": "#10B981",
+  "description": "Quarkus 配置文件",
+  "parentId": 1
+}
+
+### 13. 列出所有标签
+GET {{apiTags}}
+
+### 14. 更新标签
+PUT {{apiTags}}/1
+Content-Type: application/json
+
+{
+  "name": "Java Source Code",
+  "color": "#EF4444"
+}
+
+### 15. 删除标签
+DELETE {{apiTags}}/1
+
+# ============================================================
+# 批量操作
+# ============================================================
+
+### 16. 提交批量任务
+POST {{apiBatch}}
+Content-Type: application/json
+
+{
+  "type": "COPY",
+  "tasks": [
+    {"operation": "COPY", "source": "E:\\local\\test\\a.txt", "destination": "E:\\local\\test\\backup\\a.txt"},
+    {"operation": "COPY", "source": "E:\\local\\test\\b.txt", "destination": "E:\\local\\test\\backup\\b.txt"},
+    {"operation": "DELETE", "source": "E:\\local\\test\\old.txt", "destination": ""}
+  ]
+}
+
+### 17. 查询批量任务进度
+GET {{apiBatch}}/1
+
+# ============================================================
+# 批量操作
+# ============================================================
+
+### 18. 扫描重复文件
+POST {{apiDupes}}/scan?rootPath=E:\local\test
+
+### 19. 列出所有重复组
+GET {{apiDupes}}
+
+### 20. 清理重复文件 (保留最旧)
+DELETE {{apiDupes}}/1?keepPolicy=oldest
+
+# ============================================================
+# WebSocket (使用 wscat 或浏览器控制台测试)
+# ============================================================
+
+### WebSocket 连接测试:
+# wscat -c ws://localhost:8080/ws/file-monitor
+# > {"action":"watch","path":"E:/local/test"}
+#
+# wscat -c ws://localhost:8080/ws/batch-progress/1
+# (自动每 2 秒推送进度)
+
+# ============================================================
+# OpenAPI 文档
+# ============================================================
+
+### Swagger UI
+# 浏览器访问: http://localhost:8080/swagger-ui
+
+### OpenAPI JSON
+# http://localhost:8080/openapi
