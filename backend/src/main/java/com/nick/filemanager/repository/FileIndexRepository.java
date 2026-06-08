@@ -63,6 +63,35 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
             .list();
     }
 
+    /** Regex search — Java-side regex, automatically makes it a "contains" search */
+    public Uni<List<FileIndex>> regexSearch(String pattern, int offset, int limit) {
+        return listAll()
+            .map(all -> all.stream()
+                .filter(f -> {
+                    try {
+                        return java.util.regex.Pattern
+                            .compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
+                            .matcher(f.name).find();
+                    } catch (Exception e) { return false; }
+                })
+                .skip(offset)
+                .limit(limit)
+                .toList());
+    }
+
+    public Uni<Long> countRegexSearch(String pattern) {
+        return listAll()
+            .map(all -> all.stream()
+                .filter(f -> {
+                    try {
+                        return java.util.regex.Pattern
+                            .compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
+                            .matcher(f.name).find();
+                    } catch (Exception e) { return false; }
+                })
+                .count());
+    }
+
     /** Full-text search on content snippet (ILIKE for HQL compatibility) */
     public Uni<List<FileIndex>> fullTextSearch(String query, int offset, int limit) {
         return find("LOWER(contentSnippet) LIKE LOWER(?1)", "%" + query + "%")

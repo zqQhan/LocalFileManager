@@ -58,21 +58,82 @@ public class SearchService {
             resultsUni = fileRepo.fullTextSearch(query.getQ(),
                 query.getPage() * query.getSize(), query.getSize());
             countUni = fileRepo.countFullTextSearch(query.getQ());
+        } else if (query.isRegex()) {
+            resultsUni = fileRepo.regexSearch(query.getQ(),
+                query.getPage() * query.getSize(), query.getSize());
+            countUni = fileRepo.countRegexSearch(query.getQ());
         } else {
             resultsUni = fileRepo.searchByName(query.getQ(),
                 query.getPage() * query.getSize(), query.getSize());
             countUni = fileRepo.countByName(query.getQ());
         }
 
-        return resultsUni.flatMap(results -> countUni.map(total -> {
-            SearchResult sr = new SearchResult();
-            sr.query = query.getQ();
-            sr.files = results.stream().map(this::toFileInfo).collect(Collectors.toList());
-            sr.total = total.intValue();
-            sr.page = query.getPage();
-            sr.size = query.getSize();
-            return sr;
-        }));
+        return resultsUni.flatMap(results -> {
+            // Apply advanced filters in-memory
+            List<FileIndex> filtered = applyFilters(results, query);
+            return Uni.createFrom().item(() -> {
+                SearchResult sr = new SearchResult();
+                sr.query = query.getQ();
+                sr.files = filtered.stream().map(this::toFileInfo).collect(Collectors.toList());
+                sr.total = filtered.size();
+                sr.page = query.getPage();
+                sr.size = query.getSize();
+                return sr;
+            });
+        });
+    }
+
+    /** Apply size/date/extension filters in-memory (post-DB query) */
+    private List<FileIndex> applyFilters(List<FileIndex> files, SearchQuery query) {
+        // Pre-validate dates — fail fast with clear error
+        var from = parseDate(query.getDateFrom(), "dateFrom");
+        var to = parseDate(query.getDateTo(), "dateTo");
+
+        var stream = files.stream();
+        if (query.getExtensionFilter() != null && !query.getExtensionFilter().isBlank()) {
+            stream = stream.filter(f -> f.extension != null
+                && f.extension.equalsIgnoreCase(query.getExtensionFilter()));
+        }
+        if (query.getSizeMin() != null) {
+            stream = stream.filter(f -> f.sizeBytes >= query.getSizeMin());
+        }
+        if (query.getSizeMax() != null) {
+            stream = stream.filter(f -> f.sizeBytes <= query.getSizeMax());
+        }
+        if (from != null) {
+            stream = stream.filter(f -> f.modifiedAt != null && !f.modifiedAt.isBefore(from));
+        }
+        if (to != null) {
+            stream = stream.filter(f -> f.modifiedAt != null && !f.modifiedAt.isAfter(to));
+        }
+        return stream.toList();
+    }
+
+    private java.time.LocalDateTime parseDate(String value, String fieldName) {
+        if (value == null) return null;
+        try {
+            return java.time.LocalDateTime.parse(value);
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                "Invalid " + fieldName + " value '" + value + "'. Use ISO format: 2026-01-01T00:00:00");
+        }
+    }
+
+    /** Export all matching results (no pagination, no cache) — for CSV/JSON download */
+    @WithTransaction
+    public Uni<List<FileInfo>> exportResults(SearchQuery query) {
+        Uni<List<FileIndex>> resultsUni;
+        if (query.getType() == SearchQuery.SearchType.CONTENT) {
+            resultsUni = fileRepo.fullTextSearch(query.getQ(), 0, 1000);
+        } else if (query.isRegex()) {
+            resultsUni = fileRepo.regexSearch(query.getQ(), 0, 1000);
+        } else {
+            resultsUni = fileRepo.searchByName(query.getQ(), 0, 1000);
+        }
+        return resultsUni.map(results ->
+            applyFilters(results, query).stream()
+                .map(this::toFileInfo)
+                .collect(Collectors.toList()));
     }
 
     private Uni<Void> cacheResult(String key, SearchResult result) {

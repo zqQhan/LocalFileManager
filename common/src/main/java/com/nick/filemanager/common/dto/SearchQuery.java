@@ -12,6 +12,11 @@ public class SearchQuery {
     private String rootPath;         // Limit search scope
     private String extensionFilter;  // Filter by extension
     private Long tagId;              // Filter by tag
+    private boolean regex;           // Use regex for name search
+    private Long sizeMin;            // Minimum file size filter
+    private Long sizeMax;            // Maximum file size filter
+    private String dateFrom;         // Modified after (ISO date)
+    private String dateTo;           // Modified before (ISO date)
 
     public enum SearchType {
         NAME,       // Search by filename only
@@ -41,4 +46,19 @@ public class SearchQuery {
 
     public Long getTagId() { return tagId; }
     public void setTagId(Long tagId) { this.tagId = tagId; }
+
+    public boolean isRegex() { return regex; }
+    public void setRegex(boolean regex) { this.regex = regex; }
+
+    public Long getSizeMin() { return sizeMin; }
+    public void setSizeMin(Long sizeMin) { this.sizeMin = sizeMin; }
+
+    public Long getSizeMax() { return sizeMax; }
+    public void setSizeMax(Long sizeMax) { this.sizeMax = sizeMax; }
+
+    public String getDateFrom() { return dateFrom; }
+    public void setDateFrom(String dateFrom) { this.dateFrom = dateFrom; }
+
+    public String getDateTo() { return dateTo; }
+    public void setDateTo(String dateTo) { this.dateTo = dateTo; }
 }

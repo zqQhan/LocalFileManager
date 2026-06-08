@@ -168,3 +168,51 @@ DELETE {{apiDupes}}/1?keepPolicy=oldest
 
 ### OpenAPI JSON
 # http://localhost:8080/openapi
+
+# ============================================================
+# 拓展功能 #5 #6 #8 #9
+# ============================================================
+
+### 21. 文件统计仪表盘
+GET {{baseUrl}}/api/stats/dashboard
+
+### 22. 正则搜索
+GET {{apiFiles}}/search?q=Resource&regex=true&type=NAME
+
+### 23. 正则 + 高级过滤
+GET {{apiFiles}}/search?q=Service&regex=true&type=NAME&sizeMin=1000&sizeMax=10000&extension=java
+
+### 24. 导出 JSON
+GET {{apiFiles}}/search/export?q=Resource&regex=true&type=NAME&format=json
+
+### 25. 导出 CSV
+GET {{apiFiles}}/search/export?q=Resource&regex=true&type=NAME&format=csv
+
+### 26. 创建文件规则
+POST {{baseUrl}}/api/rules
+Content-Type: application/json
+
+{
+  "name": "清理临时文件",
+  "pattern": "*.tmp",
+  "actionType": "DELETE",
+  "rootPath": "E:/local/test",
+  "enabled": false
+}
+
+### 27. 列出所有规则
+GET {{baseUrl}}/api/rules
+
+### 28. 执行规则
+POST {{baseUrl}}/api/rules/1/execute
+
+### 29. 更新规则
+PUT {{baseUrl}}/api/rules/1
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+
+### 30. 删除规则
+DELETE {{baseUrl}}/api/rules/1

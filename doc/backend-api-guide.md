@@ -217,6 +217,76 @@ DELETE /api/duplicates/1?keepPolicy=oldest
 → 200 {"deleted":2,"message":"Cleaned 2 duplicate file(s)"}
 ```
 
+### 3.7 统计仪表盘
+
+```
+GET /api/stats/dashboard
+→ 200 {
+  "totalFiles": 34,
+  "totalSizeBytes": 123456,
+  "totalSizeFormatted": "120.6 KB",
+  "byExtension": {"java": 32, "properties": 1, "sql": 1},
+  "byMimeType": {"text/plain": 32, "unknown": 2},
+  "largestFiles": [{"name":"FileIndex.java","path":"...","size":"2.6 KB"}, ...],
+  "recentlyModified": [...],
+  "oldestFiles": [...],
+  "uniqueContentHashes": 30,
+  "potentialDuplicates": 4
+}
+```
+
+### 3.8 正则搜索 + 高级过滤
+
+```
+# 正则搜索文件名
+GET /api/files/search?q=Resource&regex=true&type=NAME
+→ {"total": 7, "files": [...]}
+
+# 正则 + 大小过滤 + 日期过滤 + 扩展名
+GET /api/files/search?q=Service&regex=true&type=NAME&sizeMin=1000&sizeMax=10000&extension=java&dateFrom=2026-01-01
+→ {"total": 3, "files": [...]}
+
+# 非法日期 → 400
+GET /api/files/search?q=test&dateFrom=2026-13-45
+→ 400 {"error":"Invalid dateFrom value '2026-13-45'. Use ISO format: 2026-01-01T00:00:00"}
+```
+
+### 3.9 搜索结果导出
+
+```
+# JSON 格式
+GET /api/files/search/export?q=Resource&regex=true&type=NAME&format=json
+→ 200 [{"name":"FileResource.java","path":"...","sizeBytes":7326}, ...]
+
+# CSV 格式 (Content-Disposition: attachment)
+GET /api/files/search/export?q=Resource&regex=true&type=NAME&format=csv
+→ 200 (CSV 文件下载)
+```
+
+### 3.10 文件操作规则
+
+```
+# 创建规则
+POST /api/rules
+{"name":"清理临时文件","pattern":"*.tmp","actionType":"DELETE","rootPath":"E:/local/test","enabled":false}
+→ 200 {"id":1,"name":"清理临时文件","pattern":"*.tmp",...}
+
+# 列出规则
+GET /api/rules → 200 [...]
+
+# 执行规则 (匹配文件并操作)
+POST /api/rules/1/execute
+→ 200 {"matched":5,"affected":5}
+
+# 执行全部启用规则
+POST /api/rules/execute-all
+→ 200 {"executed":2,"results":[...]}
+
+# 更新/删除
+PUT /api/rules/1 {"enabled":true} → 200
+DELETE /api/rules/1 → 204
+```
+
 ---
 
 ## 4. WebSocket 实时通信
@@ -351,7 +421,7 @@ client.copyFile("E:/local/a.txt", "E:/local/b.txt")
 1. **路径用正斜杠** `E:/local/test` 而不是 `E:\local\test` (Java 自动兼容)
 2. **搜索前先索引** — 否则返回 `total: 0`
 3. **重启后端会清数据库** (`drop-and-create` 模式) — 需要重新索引
-4. **系统目录有保护** — 操作 `C:\Windows` 等会返回 400
+4. **系统目录有保护** — 操作 `C:\Windows` 等会返回 **403 Forbidden**
 5. **所有 API 返回 JSON** — 错误带 `{"error":"..."}` 字段
 6. **Swagger UI** — 浏览器 `localhost:8080/swagger-ui` 可交互式测试所有接口
 7. **`api.http` 文件** — VS Code 装 REST Client 插件后可直接发包测试

@@ -14,20 +14,27 @@ JavaFX Desktop App  ──HTTP/REST──►  Quarkus Backend  ──►  Postgr
 ## 2. 后端分层架构
 
 ### Controller 层 (api/)
-- `FileResource` — 文件 CRUD + 搜索入口
+- `FileResource` — 文件 CRUD + 同步/异步索引
+- `SearchResource` — 搜索 (正则/过滤) + 导出
 - `TagResource` — 标签管理
-- `SearchResource` — 搜索端点
 - `DuplicateResource` — 去重管理
+- `BatchResource` — 批量操作
+- `StatsResource` — 统计仪表盘
+- `FileRuleResource` — 文件操作规则
 
 ### Service 层 (service/)
-- `FileService` — 文件操作 (NIO), 内容哈希, 片段提取
-- `SearchService` — 搜索编排, Redis 缓存, 历史记录
-- `TagService` — 标签 CRUD, 层级管理
-- `DuplicateService` — 重复检测, 清理
+- `FileService` — 文件操作 (NIO worker 线程), 内容哈希
+- `SearchService` — 搜索编排, Redis 缓存, 高级过滤, 导出
+- `TagService` — 标签 CRUD
+- `DuplicateService` — 重复检测 (多组返回), 清理
+- `IndexService` — 全量索引 (Reactive)
+- `BatchService` — 批量任务 (worker 线程 offload)
+- `StatsService` — 统计聚合 (Stream API)
+- `FileRuleService` — 规则执行引擎 (Glob + WalkFileTree)
+- `PathGuard` — 路径安全守卫 (黑名单/白名单)
 
 ### Repository 层 (repository/)
-- `FileIndexRepository` — 文件索引查询 (ILIKE, tsvector, hash)
-- `TagRepository` — 标签查询
+- `FileIndexRepository` — 文件索引查询 (ILIKE, 正则, tsvector)
 
 ### Entity 层 (model/entity/)
 - `FileIndex` — 索引文件 (path, name, hash, snippet)
@@ -35,6 +42,7 @@ JavaFX Desktop App  ──HTTP/REST──►  Quarkus Backend  ──►  Postgr
 - `DuplicateGroup` / `DuplicateFile` — 重复文件
 - `SearchHistory` — 搜索历史
 - `BatchTask` — 批量任务
+- `FileRule` — 文件操作规则 (Glob pattern + action)
 
 ## 3. 数据流
 
@@ -66,6 +74,36 @@ Desktop WS Connect → ws://localhost:8080/ws/file-monitor
   → WatchService 注册目录
   → 文件变更 → WebSocket push {"type":"create","path":"..."}
   → Desktop 自动刷新文件列表
+```
+
+### 正则搜索流程
+```
+Desktop → GET /api/files/search?q=Resource&regex=true
+  → SearchService.search()
+    → FileIndexRepository.regexSearch() → listAll() + Pattern.find()
+    → applyFilters() — 大小/日期/扩展名内存过滤
+    → Redis cache
+    → Response: {"files":[...], "total": N}
+```
+
+### 规则执行流程
+```
+Desktop → POST /api/rules/{id}/execute
+  → FileRuleService.execute()
+    → PathGuard.checkSafe() — 安全校验
+    → Worker Thread: Files.walkFileTree + PathMatcher.glob
+    → Event Loop: Rule.persist() (reactive)
+    → Response: {"matched":5,"affected":5}
+```
+
+### 导出流程
+```
+Desktop → GET /api/files/search/export?q=...&format=csv
+  → SearchService.exportResults() — 无分页, 无缓存
+    → FileIndexRepository 查询 (limit 1000)
+    → applyFilters()
+    → CSV: 拼接字符串 + Content-Disposition header
+    → JSON: 直接返回 List<FileInfo>
 ```
 
 ## 4. 关键设计决策
