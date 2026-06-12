@@ -1,95 +1,562 @@
-/* File Manager Desktop — JavaFX Stylesheet */
+/* File Manager Desktop — Pac-File Arcade JavaFX Stylesheet */
 
 .root {
-    -fx-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    -fx-font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
     -fx-font-size: 13px;
+    -fx-background-color: #070716;
+    -fx-text-fill: #f8f8ff;
+}
+
+.app-shell {
+    -fx-background-color:
+        linear-gradient(from 0% 0% to 100% 0%, rgba(27, 35, 104, 0.92), rgba(9, 9, 29, 0.96)),
+        radial-gradient(center 18% 20%, radius 62%, rgba(40, 69, 202, 0.34), transparent 70%);
+}
+
+.top-section,
+.command-deck,
+.sidebar,
+.center-panel,
+.inspector,
+.status-bar {
+    -fx-background-color: transparent;
 }
 
 /* ---- Menu Bar ---- */
+.ops-menu,
 .menu-bar {
-    -fx-background-color: #1F2937;
+    -fx-background-color: #08081a;
+    -fx-border-color: #244dff;
+    -fx-border-width: 0 0 2px 0;
 }
 
 .menu-bar .label {
-    -fx-text-fill: #F9FAFB;
+    -fx-text-fill: #fff36d;
+    -fx-font-weight: 900;
 }
 
+.menu:hover,
+.menu:showing {
+    -fx-background-color: rgba(36, 77, 255, 0.32);
+}
+
+.context-menu,
 .menu-item {
-    -fx-padding: 6px 20px;
+    -fx-background-color: #11113a;
 }
 
-/* ---- Search Bar ---- */
-.text-field {
+.menu-item .label {
+    -fx-text-fill: #f8f8ff;
+}
+
+.menu-item:focused {
+    -fx-background-color: #244dff;
+}
+
+.danger-menu-item .label {
+    -fx-text-fill: #ff5c7a;
+}
+
+/* ---- Command Deck ---- */
+.command-deck {
+    -fx-padding: 16px 22px 16px 22px;
+    -fx-background-color:
+        linear-gradient(from 0% 0% to 100% 0%, rgba(13, 18, 64, 0.98), rgba(9, 9, 29, 0.94));
+    -fx-border-color: #244dff;
+    -fx-border-width: 0 0 3px 0;
+}
+
+.brand-mark {
+    -fx-min-width: 58px;
+    -fx-min-height: 58px;
+    -fx-alignment: center;
+    -fx-background-color: #f7d51d;
+    -fx-background-radius: 999px;
+    -fx-border-color: #ff9f1c;
+    -fx-border-radius: 999px;
+    -fx-border-width: 3px;
+    -fx-text-fill: #101018;
+    -fx-font-size: 15px;
+    -fx-font-weight: 900;
+    -fx-effect: dropshadow(gaussian, rgba(247, 213, 29, 0.55), 20, 0.22, 0, 0);
+}
+
+.screen-title {
+    -fx-text-fill: #fff36d;
+    -fx-font-family: "Cascadia Mono", "Consolas", "Microsoft YaHei UI", monospace;
+    -fx-font-size: 29px;
+    -fx-font-weight: 900;
+}
+
+.screen-subtitle,
+.panel-subtitle,
+.hint-text,
+.status-tip,
+.mono-muted {
+    -fx-text-fill: #9db5ff;
+}
+
+.health-pill {
+    -fx-padding: 8px 12px;
+    -fx-background-color: #10143d;
+    -fx-border-color: #00f0ff;
+    -fx-border-radius: 999px;
+    -fx-background-radius: 999px;
+    -fx-border-width: 2px;
+}
+
+.health-text {
+    -fx-text-fill: #00f0ff;
+    -fx-font-weight: 900;
+}
+
+.path-readout {
+    -fx-text-fill: #c8d3ff;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-padding: 2px 0 0 2px;
+}
+
+.arcade-art {
+    -fx-effect: dropshadow(gaussian, rgba(0, 240, 255, 0.4), 18, 0.2, 0, 0);
+}
+
+/* ---- Inputs ---- */
+.text-field,
+.combo-box,
+.check-box .box {
+    -fx-background-color: #06071c;
+    -fx-border-color: #244dff;
+    -fx-border-radius: 6px;
     -fx-background-radius: 6px;
-    -fx-padding: 6px 10px;
+}
+
+.text-field {
+    -fx-text-fill: #f8f8ff;
+    -fx-prompt-text-fill: #7182d4;
+    -fx-padding: 10px 12px;
+}
+
+.command-input {
+    -fx-font-size: 14px;
+    -fx-border-color: #00f0ff;
+    -fx-effect: innershadow(gaussian, rgba(0, 240, 255, 0.14), 8, 0.18, 0, 0);
+}
+
+.extension-input {
+    -fx-font-size: 12px;
 }
 
 .combo-box {
-    -fx-background-radius: 6px;
+    -fx-padding: 3px 8px;
 }
 
-/* ---- File Tree ---- */
-.tree-view {
-    -fx-background-color: #F9FAFB;
-    -fx-border-color: #E5E7EB;
-    -fx-border-width: 0 1px 0 0;
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #f8f8ff;
 }
 
-.tree-cell {
-    -fx-padding: 4px 8px;
-    -fx-font-size: 13px;
+.combo-box-popup .list-view {
+    -fx-background-color: #10143d;
+    -fx-border-color: #244dff;
 }
 
-.tree-cell:selected {
-    -fx-background-color: #DBEAFE;
-    -fx-text-fill: #1E40AF;
+.combo-box-popup .list-cell {
+    -fx-background-color: #10143d;
+    -fx-text-fill: #f8f8ff;
+    -fx-padding: 8px 10px;
 }
 
-/* ---- File Table ---- */
-.table-view {
-    -fx-border-color: #E5E7EB;
-    -fx-font-size: 13px;
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: #244dff;
 }
 
-.table-view .column-header {
-    -fx-background-color: #F3F4F6;
-    -fx-padding: 8px 4px;
+.regex-toggle {
+    -fx-text-fill: #fff36d;
+    -fx-font-weight: 900;
 }
 
-.table-view .column-header .label {
-    -fx-font-weight: bold;
-    -fx-text-fill: #374151;
+.check-box:selected .mark {
+    -fx-background-color: #101018;
 }
 
-.table-row-cell:odd {
-    -fx-background-color: #FFFFFF;
-}
-
-.table-row-cell:even {
-    -fx-background-color: #F9FAFB;
-}
-
-.table-row-cell:selected {
-    -fx-background-color: #DBEAFE;
-    -fx-text-fill: #1E40AF;
+.check-box:selected .box {
+    -fx-background-color: #f7d51d;
+    -fx-border-color: #ff9f1c;
 }
 
 /* ---- Buttons ---- */
 .button {
-    -fx-background-radius: 6px;
-    -fx-padding: 6px 16px;
     -fx-cursor: hand;
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-padding: 9px 13px;
+    -fx-font-weight: 900;
 }
 
-.button:hover {
-    -fx-opacity: 0.9;
+.button:disabled {
+    -fx-opacity: 0.42;
+}
+
+.primary-button {
+    -fx-background-color: #f7d51d;
+    -fx-border-color: #ff9f1c;
+    -fx-border-width: 2px;
+    -fx-text-fill: #101018;
+    -fx-effect: dropshadow(gaussian, rgba(247, 213, 29, 0.45), 16, 0.18, 0, 0);
+}
+
+.primary-button:hover {
+    -fx-background-color: #fff36d;
+}
+
+.ghost-button,
+.icon-button,
+.side-action {
+    -fx-background-color: #10143d;
+    -fx-border-color: #244dff;
+    -fx-border-width: 2px;
+    -fx-text-fill: #f8f8ff;
+}
+
+.ghost-button:hover,
+.icon-button:hover,
+.side-action:hover {
+    -fx-background-color: #182184;
+    -fx-border-color: #00f0ff;
+    -fx-text-fill: #fff36d;
+}
+
+.nav-button {
+    -fx-background-color: #090b2a;
+    -fx-border-color: #244dff;
+    -fx-border-width: 2px;
+    -fx-text-fill: #f8f8ff;
+    -fx-padding: 11px 12px;
+}
+
+.nav-button:hover {
+    -fx-background-color: #182184;
+    -fx-border-color: #f7d51d;
+    -fx-text-fill: #fff36d;
+}
+
+/* ---- Left Rail ---- */
+.sidebar {
+    -fx-padding: 18px 14px;
+    -fx-background-color: rgba(8, 8, 26, 0.92);
+    -fx-border-color: #244dff;
+    -fx-border-width: 0 3px 0 0;
+}
+
+.section-label {
+    -fx-text-fill: #ff5c7a;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.soft-separator .line {
+    -fx-border-color: rgba(36, 77, 255, 0.55);
+}
+
+.backend-card,
+.detail-card,
+.metric-card {
+    -fx-background-color: rgba(16, 20, 61, 0.92);
+    -fx-border-color: #244dff;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-border-width: 2px;
+}
+
+.backend-card {
+    -fx-padding: 12px;
+}
+
+.mini-title {
+    -fx-text-fill: #fff36d;
+    -fx-font-weight: 900;
+}
+
+.mono-muted {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+/* ---- Center ---- */
+.center-panel {
+    -fx-padding: 18px;
+}
+
+.panel-title {
+    -fx-text-fill: #fff36d;
+    -fx-font-family: "Cascadia Mono", "Consolas", "Microsoft YaHei UI", monospace;
+    -fx-font-size: 21px;
+    -fx-font-weight: 900;
+}
+
+.tech-chip {
+    -fx-padding: 5px 9px;
+    -fx-background-color: #10143d;
+    -fx-border-color: #00f0ff;
+    -fx-border-radius: 999px;
+    -fx-background-radius: 999px;
+    -fx-text-fill: #00f0ff;
+    -fx-font-size: 11px;
+    -fx-font-weight: 900;
+}
+
+/* ---- Table ---- */
+.file-table {
+    -fx-background-color: rgba(6, 7, 28, 0.96);
+    -fx-border-color: #244dff;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-table-cell-border-color: transparent;
+    -fx-padding: 1px;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: #10143d;
+    -fx-background-radius: 6px 6px 0 0;
+}
+
+.table-view .column-header,
+.table-view .filler {
+    -fx-background-color: transparent;
+    -fx-size: 42px;
+    -fx-border-color: rgba(0, 240, 255, 0.3);
+    -fx-border-width: 0 0 1px 0;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: #fff36d;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.table-row-cell {
+    -fx-background-color: rgba(9, 11, 42, 0.95);
+    -fx-border-color: rgba(36, 77, 255, 0.35);
+    -fx-border-width: 0 0 1px 0;
+    -fx-cell-size: 44px;
+}
+
+.table-row-cell:odd {
+    -fx-background-color: rgba(12, 15, 54, 0.95);
+}
+
+.table-row-cell:hover {
+    -fx-background-color: rgba(24, 33, 132, 0.86);
+}
+
+.table-row-cell:selected {
+    -fx-background-color: rgba(247, 213, 29, 0.24);
+}
+
+.table-cell {
+    -fx-text-fill: #f8f8ff;
+    -fx-alignment: center-left;
+    -fx-padding: 0 10px;
+}
+
+.file-name-cell {
+    -fx-text-fill: #f8f8ff;
+    -fx-font-weight: 900;
+}
+
+.directory-name-cell {
+    -fx-text-fill: #00f0ff;
+}
+
+.dir-badge,
+.file-badge {
+    -fx-min-width: 42px;
+    -fx-alignment: center;
+    -fx-padding: 4px 6px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-font-size: 10px;
+    -fx-font-weight: 900;
+}
+
+.dir-badge {
+    -fx-background-color: #10143d;
+    -fx-border-color: #00f0ff;
+    -fx-text-fill: #00f0ff;
+}
+
+.file-badge {
+    -fx-background-color: #2d1735;
+    -fx-border-color: #ff5c7a;
+    -fx-text-fill: #ff9db1;
+}
+
+.table-view .placeholder .label {
+    -fx-text-fill: #9db5ff;
+}
+
+/* ---- Inspector ---- */
+.inspector {
+    -fx-padding: 18px 16px;
+    -fx-background-color: rgba(8, 8, 26, 0.9);
+    -fx-border-color: #244dff;
+    -fx-border-width: 0 0 0 3px;
+}
+
+.detail-card {
+    -fx-padding: 13px;
+}
+
+.detail-name {
+    -fx-text-fill: #fff36d;
+    -fx-font-size: 17px;
+    -fx-font-weight: 900;
+}
+
+.detail-meta {
+    -fx-text-fill: #9db5ff;
+}
+
+.detail-path {
+    -fx-text-fill: #f8f8ff;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.metric-grid {
+    -fx-padding: 0;
+}
+
+.metric-card {
+    -fx-padding: 12px;
+    -fx-min-width: 142px;
+    -fx-min-height: 74px;
+}
+
+.metric-value {
+    -fx-text-fill: #00f0ff;
+    -fx-font-size: 22px;
+    -fx-font-weight: 900;
+}
+
+.metric-caption {
+    -fx-text-fill: #9db5ff;
+    -fx-font-size: 11px;
+    -fx-font-weight: 900;
+}
+
+.rank-dot {
+    -fx-text-fill: #f7d51d;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-weight: 900;
+}
+
+.rank-name {
+    -fx-text-fill: #f8f8ff;
+}
+
+.rank-size {
+    -fx-text-fill: #9db5ff;
+    -fx-font-size: 11px;
+}
+
+.activity-list {
+    -fx-background-color: rgba(6, 7, 28, 0.96);
+    -fx-border-color: #244dff;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-border-width: 2px;
+}
+
+.activity-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #c8d3ff;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-padding: 7px 9px;
+}
+
+.activity-list .list-cell:selected {
+    -fx-background-color: #182184;
+}
+
+/* ---- Status ---- */
+.status-bar {
+    -fx-padding: 8px 16px;
+    -fx-background-color: #08081a;
+    -fx-border-color: #244dff;
+    -fx-border-width: 3px 0 0 0;
+}
+
+.status-label,
+.status-tip {
+    -fx-text-fill: #f8f8ff;
+}
+
+.pacman-loader {
+    -fx-min-width: 80px;
+}
+
+.pacman-glyph {
+    -fx-text-fill: #f7d51d;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 19px;
+    -fx-font-weight: 900;
+}
+
+.pacman-dot {
+    -fx-text-fill: #fff36d;
+    -fx-font-size: 16px;
+    -fx-font-weight: 900;
+}
+
+/* ---- Scrollbars ---- */
+.scroll-bar:vertical,
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: rgba(0, 240, 255, 0.32);
+    -fx-background-radius: 999px;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(247, 213, 29, 0.56);
+}
+
+.scroll-bar .track,
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
 }
 
 /* ---- Dialogs ---- */
+.ops-dialog,
 .dialog-pane {
-    -fx-padding: 16px;
+    -fx-background-color: #10143d;
+    -fx-border-color: #244dff;
+    -fx-border-width: 2px;
+}
+
+.ops-dialog .content,
+.dialog-pane .content {
+    -fx-text-fill: #f8f8ff;
 }
 
 .dialog-pane .header-panel {
-    -fx-background-color: #F3F4F6;
+    -fx-background-color: #08081a;
+}
+
+.dialog-pane .header-panel .label,
+.dialog-pane .label {
+    -fx-text-fill: #f8f8ff;
+}
+
+.export-preview {
+    -fx-control-inner-background: #06071c;
+    -fx-background-color: #06071c;
+    -fx-text-fill: #f8f8ff;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
 }

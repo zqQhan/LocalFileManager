@@ -109,6 +109,8 @@ cd desktop
 mvn javafx:run
 ```
 
+> 前端已重构为 Pac-File Arcade 街机风界面。详细运行方式、端口冲突处理、已知后端限制见 `doc/frontend-run-guide.md`。
+
 ## API 端点概览
 
 | 方法 | 路径 | 说明 |

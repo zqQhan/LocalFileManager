@@ -40,3 +40,12 @@ desktop.ini
 
 # Logs
 *.log
+
+# Local agent/tooling runtime data
+.codex-run/
+.codegraph/
+.cursor/
+
+# Generated image candidates kept only for local iteration
+desktop/src/main/resources/images/20*.png
+desktop/src/main/resources/images/fairy-archive.png

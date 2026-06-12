@@ -41,17 +41,65 @@ public class FileApiClient {
         return getAsync(url, new TypeReference<List<FileInfo>>() {});
     }
 
-    /** Search files by name or content */
+    /** Search files by name, content, or both. */
     public CompletableFuture<List<FileInfo>> search(String query, String type, int page, int size) {
-        String url = String.format("%s/api/files/search?q=%s&type=%s&page=%d&size=%d",
-            baseUrl, urlEncode(query), type, page, size);
-        return getAsync(url, new TypeReference<Map<String, Object>>() {})
+        return search(query, type, page, size, false, null);
+    }
+
+    /** Search files with advanced filters supported by the backend. */
+    public CompletableFuture<List<FileInfo>> search(
+            String query,
+            String type,
+            int page,
+            int size,
+            boolean regex,
+            String extension) {
+        StringBuilder url = new StringBuilder(String.format(
+            "%s/api/files/search?q=%s&type=%s&page=%d&size=%d&regex=%s",
+            baseUrl, urlEncode(query), urlEncode(type), page, size, regex));
+        if (extension != null && !extension.isBlank()) {
+            url.append("&extension=").append(urlEncode(extension.trim().replaceFirst("^\\.", "")));
+        }
+        return getAsync(url.toString(), new TypeReference<Map<String, Object>>() {})
             .thenApply(map -> {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> files = (List<Map<String, Object>>) map.get("files");
                 if (files == null) return new ArrayList<>();
                 return files.stream().map(f -> mapper.convertValue(f, FileInfo.class)).toList();
             });
+    }
+
+    /** Export search results as CSV or JSON text. */
+    public CompletableFuture<String> exportSearch(String query, String type, boolean regex, String extension, String format) {
+        StringBuilder url = new StringBuilder(String.format(
+            "%s/api/files/search/export?q=%s&type=%s&regex=%s&format=%s",
+            baseUrl, urlEncode(query), urlEncode(type), regex, urlEncode(format)));
+        if (extension != null && !extension.isBlank()) {
+            url.append("&extension=").append(urlEncode(extension.trim().replaceFirst("^\\.", "")));
+        }
+        HttpRequest req = HttpRequest.newBuilder()
+            .uri(URI.create(url.toString()))
+            .GET()
+            .build();
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            .thenApply(this::bodyOrThrow);
+    }
+
+    /** Sync-index a directory so search has fresh data. */
+    public CompletableFuture<Map<String, Object>> indexDirectory(String path) {
+        String url = baseUrl + "/api/files/index?path=" + urlEncode(path);
+        return postUrlAsync(url, "", new TypeReference<Map<String, Object>>() {});
+    }
+
+    /** Async-index via Kafka when the infrastructure is available. */
+    public CompletableFuture<Map<String, Object>> indexDirectoryAsync(String path) {
+        String url = baseUrl + "/api/files/index/async?path=" + urlEncode(path);
+        return postUrlAsync(url, "", new TypeReference<Map<String, Object>>() {});
+    }
+
+    /** Backend dashboard statistics. */
+    public CompletableFuture<Map<String, Object>> getDashboard() {
+        return getAsync(baseUrl + "/api/stats/dashboard", new TypeReference<Map<String, Object>>() {});
     }
 
     /** Copy a file */
@@ -82,13 +130,17 @@ public class FileApiClient {
             .uri(URI.create(url))
             .DELETE()
             .build();
-        return http.sendAsync(req, HttpResponse.BodyHandlers.discarding()).thenApply(r -> null);
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+            .thenApply(r -> {
+                bodyOrThrow(r);
+                return null;
+            });
     }
 
-    /** Scan for duplicates */
-    public CompletableFuture<List<Map<String, Object>>> scanDuplicates(String rootPath) {
+    /** Scan for duplicates. The backend may return either a list or an informational object. */
+    public CompletableFuture<Object> scanDuplicates(String rootPath) {
         String url = baseUrl + "/api/duplicates/scan?rootPath=" + urlEncode(rootPath);
-        return postAsync(url, "", new TypeReference<List<Map<String, Object>>>() {});
+        return postUrlAsync(url, "", new TypeReference<Object>() {});
     }
 
     // ---- Internal HTTP helpers ----
@@ -102,8 +154,12 @@ public class FileApiClient {
     }
 
     private <T> CompletableFuture<T> postAsync(String path, String body, TypeReference<T> typeRef) {
+        return postUrlAsync(baseUrl + path, body, typeRef);
+    }
+
+    private <T> CompletableFuture<T> postUrlAsync(String url, String body, TypeReference<T> typeRef) {
         HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + path))
+            .uri(URI.create(url))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
             .build();
@@ -120,16 +176,23 @@ public class FileApiClient {
     }
 
     private <T> CompletableFuture<T> sendAsync(HttpRequest req, TypeReference<T> typeRef) {
-        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString())
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
             .thenApply(r -> {
                 try {
-                    if (r.statusCode() >= 400) throw new RuntimeException("HTTP " + r.statusCode() + ": " + r.body());
-                    if (r.body() == null || r.body().isEmpty()) return null;
-                    return mapper.readValue(r.body(), typeRef);
+                    String body = bodyOrThrow(r);
+                    if (body == null || body.isEmpty()) return null;
+                    return mapper.readValue(body, typeRef);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
             });
+    }
+
+    private String bodyOrThrow(HttpResponse<String> response) {
+        if (response.statusCode() >= 400) {
+            throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
+        }
+        return response.body();
     }
 
     // ---- Utilities ----
