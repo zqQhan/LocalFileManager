@@ -210,8 +210,8 @@ public class FileService {
                 return "[Binary file]";
             }
 
-            // Plain text file — read as UTF-8
-            String text = new String(bytes, StandardCharsets.UTF_8);
+            // Plain text file — read as UTF-8, strip null chars (safety net for PostgreSQL)
+            String text = new String(bytes, StandardCharsets.UTF_8).replace("\0", "");
             return truncate(text, AppConstants.CONTENT_PREVIEW_MAX_CHARS);
         } catch (IOException e) {
             return "[Unreadable file]";
@@ -220,10 +220,9 @@ public class FileService {
 
     // ---- Binary detection & Office text extraction ----
 
-    /** Check if content appears to be binary (contains null bytes). */
+    /** Check if content contains null bytes anywhere — PostgreSQL rejects \0 in UTF-8 strings. */
     private boolean isBinaryContent(byte[] bytes) {
-        int checkLen = Math.min(bytes.length, 512);
-        for (int i = 0; i < checkLen; i++) {
+        for (int i = 0; i < bytes.length; i++) {
             if (bytes[i] == 0) return true;
         }
         return false;

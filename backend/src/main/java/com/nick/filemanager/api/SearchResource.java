@@ -40,7 +40,13 @@ public class SearchResource {
             @QueryParam("dateFrom") String dateFrom,
             @QueryParam("dateTo") String dateTo) {
 
-        if (query == null || query.isBlank()) {
+        // Allow empty query when extension or other filters are active
+        boolean hasActiveFilter = (extension != null && !extension.isBlank())
+            || sizeMin != null || sizeMax != null
+            || (dateFrom != null && !dateFrom.isBlank())
+            || (dateTo != null && !dateTo.isBlank())
+            || (rootPath != null && !rootPath.isBlank());
+        if ((query == null || query.isBlank()) && !hasActiveFilter) {
             return Uni.createFrom().item(
                 Response.status(Response.Status.BAD_REQUEST)
                     .entity(Map.of("error", "Query parameter 'q' is required")).build());
@@ -56,7 +62,7 @@ public class SearchResource {
         }
 
         SearchQuery sq = new SearchQuery();
-        sq.setQ(query.trim());
+        sq.setQ(query != null ? query.trim() : "");
         sq.setType(searchType);
         sq.setPage(page);
         sq.setSize(Math.min(size, AppConstants.MAX_PAGE_SIZE));
@@ -96,7 +102,13 @@ public class SearchResource {
             @QueryParam("format") @DefaultValue("csv") String format,
             @QueryParam("rootPath") String rootPath) {
 
-        if (query == null || query.isBlank()) {
+        // Allow empty query when extension or other filters are active
+        boolean hasActiveFilter = (extension != null && !extension.isBlank())
+            || sizeMin != null || sizeMax != null
+            || (dateFrom != null && !dateFrom.isBlank())
+            || (dateTo != null && !dateTo.isBlank())
+            || (rootPath != null && !rootPath.isBlank());
+        if ((query == null || query.isBlank()) && !hasActiveFilter) {
             return Uni.createFrom().item(Response.status(400)
                 .entity(Map.of("error", "Query 'q' is required")).build());
         }
@@ -109,7 +121,7 @@ public class SearchResource {
         }
 
         SearchQuery sq = new SearchQuery();
-        sq.setQ(query.trim());
+        sq.setQ(query != null ? query.trim() : "");
         sq.setType(searchType);
         sq.setPage(0);
         sq.setSize(1000);

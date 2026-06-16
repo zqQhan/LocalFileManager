@@ -20,6 +20,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
@@ -42,7 +43,6 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -220,7 +220,7 @@ public class MainWindow {
         arcadeArt.setPreserveRatio(false);
 
         searchField = new TextField();
-        searchField.setPromptText("输入文件名或内容关键词，例如 Resource、*.java");
+        searchField.setPromptText("输入文件名或内容关键词，也可仅填扩展名搜索");
         searchField.getStyleClass().add("command-input");
         searchField.setOnAction(e -> doSearch());
         HBox.setHgrow(searchField, Priority.ALWAYS);
@@ -240,6 +240,7 @@ public class MainWindow {
         extensionField.getStyleClass().add("extension-input");
         extensionField.setPrefWidth(92);
         extensionField.setOnAction(e -> doSearch());
+        Tooltip.install(extensionField, new Tooltip("仅填扩展名（如 java）可搜索该类型全部文件"));
 
         Button searchBtn = createPrimaryButton("搜索", "按当前条件搜索文件");
         searchBtn.setOnAction(e -> doSearch());
@@ -334,17 +335,16 @@ public class MainWindow {
         VBox titleBlock = new VBox(3);
         Label title = new Label("文件列表");
         title.getStyleClass().add("panel-title");
-        resultCountLabel = new Label("等待加载");
-        resultCountLabel.getStyleClass().add("panel-subtitle");
-        titleBlock.getChildren().addAll(title, resultCountLabel);
+        titleBlock.getChildren().add(title);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        FlowPane chips = new FlowPane(8, 8);
-        chips.getChildren().addAll(createChip("REST"), createChip("Reactive"), createChip("Redis"), createChip("WebSocket"));
+        // Result count moved to right side (replaces old tech chips)
+        resultCountLabel = new Label("等待加载");
+        resultCountLabel.getStyleClass().add("panel-subtitle");
 
-        tableHeader.getChildren().addAll(titleBlock, spacer, chips);
+        tableHeader.getChildren().addAll(titleBlock, spacer, resultCountLabel);
 
         fileTable = new TableView<>();
         fileTable.getStyleClass().add("file-table");
@@ -636,24 +636,30 @@ public class MainWindow {
 
     private void doSearch() {
         String query = searchField.getText().trim();
-        if (query.isEmpty()) {
+        String extension = extensionField.getText();
+        // Require at least one search criterion: keyword or extension
+        if (query.isEmpty() && (extension == null || extension.isBlank())) {
             pulseNode(searchField);
             return;
         }
 
         String type = selectedSearchType();
         boolean regex = regexCheck.isSelected();
-        String extension = extensionField.getText();
         lastSearchQuery = query;
         lastSearchType = type;
 
-        setBusy(true, "正在搜索: " + query + "  范围: " + currentDirectory);
+        String searchLabel = !query.isEmpty()
+            ? "正在搜索: " + query
+            : "正在搜索扩展名: " + extension;
+        setBusy(true, searchLabel + "  范围: " + currentDirectory);
         fileClient.search(query, type, 0, 80, regex, extension, currentDirectory)
             .thenAccept(result -> Platform.runLater(() -> {
                 fileTable.getItems().setAll(result);
-                resultCountLabel.setText("找到 " + result.size() + " 个结果 · " + (regex ? "正则搜索" : "普通搜索"));
-                setBusy(false, "搜索完成: " + result.size() + " 项 | " + query);
-                addActivity("搜索: " + query + " -> " + result.size());
+                String method = regex ? "正则搜索" : (query.isEmpty() ? "扩展名搜索" : "普通搜索");
+                resultCountLabel.setText("找到 " + result.size() + " 个结果 · " + method);
+                String desc = !query.isEmpty() ? query : ("*." + extension);
+                setBusy(false, "搜索完成: " + result.size() + " 项 | " + desc);
+                addActivity("搜索: " + desc + " -> " + result.size());
                 playTableRefresh();
             }))
             .exceptionally(e -> {
@@ -688,18 +694,20 @@ public class MainWindow {
     }
 
     private void exportLastSearch() {
-        String query = lastSearchQuery.isBlank() ? searchField.getText().trim() : lastSearchQuery;
-        if (query.isBlank()) {
+        String query = (lastSearchQuery != null && !lastSearchQuery.isBlank()) ? lastSearchQuery : searchField.getText().trim();
+        String extension = extensionField.getText();
+        if (query.isBlank() && (extension == null || extension.isBlank())) {
             showAlert("导出搜索结果", "请先执行一次搜索，再导出结果。");
             return;
         }
 
-        setBusy(true, "正在导出 CSV: " + query);
-        fileClient.exportSearch(query, lastSearchType, regexCheck.isSelected(), extensionField.getText(), "csv", currentDirectory)
+        String exportLabel = !query.isBlank() ? query : ("*." + extension);
+        setBusy(true, "正在导出 CSV: " + exportLabel);
+        fileClient.exportSearch(query, lastSearchType, regexCheck.isSelected(), extension, "csv", currentDirectory)
             .thenAccept(csv -> Platform.runLater(() -> {
                 setBusy(false, "导出完成");
                 showExportPreview(csv);
-                addActivity("导出 CSV: " + query);
+                addActivity("导出 CSV: " + exportLabel);
             }))
             .exceptionally(e -> {
                 Platform.runLater(() -> {
@@ -761,7 +769,7 @@ public class MainWindow {
             });
     }
 
-    /** Show a scrollable dialog with detailed duplicate group info */
+    /** Show a scrollable dialog with detailed duplicate group info and CSV export */
     @SuppressWarnings("unchecked")
     private void showDuplicateDetailDialog(List<?> groups) {
         StringBuilder sb = new StringBuilder();
@@ -807,11 +815,54 @@ public class MainWindow {
         area.setPrefSize(700, 440);
         area.getStyleClass().add("export-preview");
 
+        // Export CSV button
+        Button exportBtn = new Button("📋 导出重复文件地址 CSV");
+        exportBtn.getStyleClass().add("primary-button");
+        exportBtn.setOnAction(ev -> {
+            StringBuilder csv = new StringBuilder("重复组,哈希,文件名,文件路径,大小(Bytes)\n");
+            int grp = 1;
+            for (Object g : groups) {
+                if (!(g instanceof Map<?, ?> rawMap)) continue;
+                Map<?, ?> map = rawMap;
+                String hash = stringValue(map.get("contentHash"));
+                Object dups = map.get("duplicates");
+                if (dups instanceof List<?> dupList) {
+                    for (Object d : dupList) {
+                        if (d instanceof Map<?, ?> dm) {
+                            String name = stringValue(dm.get("name"));
+                            String fpath = stringValue(dm.get("path"));
+                            long size = dm.get("sizeBytes") instanceof Number n ? n.longValue() : 0;
+                            csv.append(String.format("\"%d\",\"%s\",\"%s\",\"%s\",%d\n",
+                                grp, hash, name.replace("\"", "\"\""), fpath.replace("\"", "\"\""), size));
+                        }
+                    }
+                }
+                grp++;
+            }
+
+            TextArea csvArea = new TextArea(csv.toString());
+            csvArea.setEditable(false);
+            csvArea.setWrapText(false);
+            csvArea.setPrefSize(760, 360);
+            csvArea.getStyleClass().add("export-preview");
+
+            Alert csvAlert = new Alert(Alert.AlertType.INFORMATION);
+            styleDialog(csvAlert.getDialogPane());
+            csvAlert.setTitle("重复文件地址 CSV");
+            csvAlert.setHeaderText("共 " + groups.size() + " 个重复组。可从此处复制 CSV 内容。");
+            csvAlert.getDialogPane().setContent(csvArea);
+            csvAlert.show();
+            addActivity("导出重复文件 CSV: " + groups.size() + " 组");
+        });
+
+        VBox contentBox = new VBox(10, area, exportBtn);
+        contentBox.setAlignment(Pos.TOP_RIGHT);
+
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         styleDialog(alert.getDialogPane());
         alert.setTitle("重复文件扫描结果");
         alert.setHeaderText("发现 " + groups.size() + " 个重复组。以下是具体文件列表：");
-        alert.getDialogPane().setContent(area);
+        alert.getDialogPane().setContent(contentBox);
         alert.show();
     }
 
@@ -1037,6 +1088,9 @@ public class MainWindow {
     }
 
 
+    // ---- Tag Management Module ----
+
+    /** Full tag management dialog with create/edit/delete and file count display. */
     private void showTagManager() {
         setBusy(true, "加载标签列表...");
         tagClient.listTags()
@@ -1045,58 +1099,130 @@ public class MainWindow {
                 javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
                 styleDialog(dialog.getDialogPane());
                 dialog.setTitle("标签管理");
-                dialog.setHeaderText("所有标签 — 共 " + tags.size() + " 个");
-                dialog.getDialogPane().setPrefWidth(520);
-                dialog.getDialogPane().setPrefHeight(400);
+                dialog.getDialogPane().setPrefWidth(700);
+                dialog.getDialogPane().setPrefHeight(480);
                 dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
-                VBox listBox = new VBox(6);
-                listBox.setPadding(new Insets(8));
+                // --- Top toolbar ---
+                Button createBtn = new Button("＋ 新建标签");
+                createBtn.getStyleClass().add("small-button");
+                Region tbSpacer = new Region();
+                HBox.setHgrow(tbSpacer, Priority.ALWAYS);
+                Label countLabel = new Label("共 " + tags.size() + " 个标签");
+                countLabel.getStyleClass().add("hint-text");
+                HBox toolbar = new HBox(10, createBtn, tbSpacer, countLabel);
+                toolbar.setAlignment(Pos.CENTER_LEFT);
+                toolbar.setPadding(new Insets(0, 0, 8, 0));
+                toolbar.getStyleClass().add("tag-manager-header");
 
-                if (tags.isEmpty()) {
-                    Label emptyLabel = new Label("暂无标签。\n\n通过 POST /api/tags 创建标签，然后右键点击已索引的文件来绑定标签。");
-                    emptyLabel.getStyleClass().add("hint-text");
-                    emptyLabel.setWrapText(true);
-                    listBox.getChildren().add(emptyLabel);
-                } else {
-                    for (TagDTO t : tags) {
-                        HBox row = new HBox(10);
-                        row.setAlignment(Pos.CENTER_LEFT);
-                        row.setPadding(new Insets(6, 10, 6, 10));
-                        row.getStyleClass().add("tag-row");
+                // --- TableView ---
+                TableView<TagDTO> table = new TableView<>();
+                table.getStyleClass().add("tag-table");
+                table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-                        // Color dot
-                        Circle dot = new Circle(6);
-                        String tagColor = (t.getColor() != null) ? t.getColor() : "#3B82F6";
-                        dot.setFill(Color.web(tagColor));
-
-                        // Tag name
-                        Label nameLabel = new Label(t.getName());
-                        nameLabel.getStyleClass().add("bold-text");
-                        nameLabel.setMinWidth(120);
-
-                        // File count
-                        int fc = (t.getFileCount() != null) ? t.getFileCount() : 0;
-                        Label countLabel = new Label(fc + " 个文件");
-                        countLabel.getStyleClass().add("hint-text");
-
-                        Region spacer = new Region();
-                        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-                        // View files button
-                        Button viewBtn = new Button("查看文件");
-                        viewBtn.getStyleClass().add("small-button");
-                        viewBtn.setOnAction(ev -> showTagFilesDialog(t));
-
-                        row.getChildren().addAll(dot, nameLabel, countLabel, spacer, viewBtn);
-                        listBox.getChildren().add(row);
+                // Color column
+                TableColumn<TagDTO, Void> colorCol = new TableColumn<>("颜色");
+                colorCol.setPrefWidth(50);
+                colorCol.setMinWidth(50);
+                colorCol.setMaxWidth(50);
+                colorCol.setCellFactory(col -> new TableCell<>() {
+                    private final Circle dot = new Circle(6);
+                    {
+                        setGraphic(dot);
+                        setAlignment(Pos.CENTER);
                     }
-                }
+                    @Override
+                    protected void updateItem(Void item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                            dot.setVisible(false);
+                        } else {
+                            dot.setVisible(true);
+                            TagDTO t = getTableRow().getItem();
+                            dot.setFill(Color.web(t.getColor() != null ? t.getColor() : "#3B82F6"));
+                        }
+                    }
+                });
 
-                javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(listBox);
-                scrollPane.setFitToWidth(true);
-                scrollPane.getStyleClass().add("edge-to-edge");
-                dialog.getDialogPane().setContent(scrollPane);
+                // Name column
+                TableColumn<TagDTO, String> nameCol = new TableColumn<>("名称");
+                nameCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getName()));
+                nameCol.setPrefWidth(130);
+                nameCol.setCellFactory(col -> new TableCell<>() {
+                    @Override
+                    protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) { setText(null); setGraphic(null); }
+                        else { setText(item); getStyleClass().add("bold-text"); }
+                    }
+                });
+
+                // Description column
+                TableColumn<TagDTO, String> descCol = new TableColumn<>("描述");
+                descCol.setCellValueFactory(data ->
+                    new SimpleStringProperty(data.getValue().getDescription() != null
+                        ? data.getValue().getDescription() : ""));
+                descCol.setPrefWidth(180);
+                descCol.setCellFactory(col -> new TableCell<>() {
+                    @Override
+                    protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null || item.isEmpty()) {
+                            setText("—");
+                            getStyleClass().add("hint-text");
+                        } else {
+                            setText(item.length() > 60 ? item.substring(0, 57) + "..." : item);
+                        }
+                    }
+                });
+
+                // File count column
+                TableColumn<TagDTO, String> countCol = new TableColumn<>("文件数");
+                countCol.setPrefWidth(80);
+                countCol.setCellValueFactory(data -> {
+                    int fc = data.getValue().getFileCount() != null ? data.getValue().getFileCount() : 0;
+                    return new SimpleStringProperty(fc + " 个文件");
+                });
+
+                // Actions column
+                TableColumn<TagDTO, Void> actionsCol = new TableColumn<>("操作");
+                actionsCol.setPrefWidth(210);
+                actionsCol.setMinWidth(210);
+                actionsCol.setCellFactory(col -> new TableCell<>() {
+                    private final Button viewBtn = new Button("查看文件");
+                    private final Button editBtn = new Button("编辑");
+                    private final Button delBtn = new Button("删除");
+                    private final HBox box;
+                    {
+                        viewBtn.getStyleClass().addAll("small-button", "tag-action-btn");
+                        editBtn.getStyleClass().addAll("small-button", "tag-action-btn");
+                        delBtn.getStyleClass().addAll("small-button", "tag-action-btn", "danger-button");
+                        box = new HBox(4, viewBtn, editBtn, delBtn);
+                        box.setAlignment(Pos.CENTER_LEFT);
+                    }
+                    @Override
+                    protected void updateItem(Void item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty) { setGraphic(null); return; }
+                        TagDTO t = getTableRow().getItem();
+                        if (t == null) { setGraphic(null); return; }
+                        viewBtn.setOnAction(ev -> showTagFilesDialog(t));
+                        editBtn.setOnAction(ev -> showCreateEditTagDialog(t));
+                        delBtn.setOnAction(ev -> confirmAndDeleteTag(t, table, countLabel));
+                        setGraphic(box);
+                    }
+                });
+
+                table.getColumns().addAll(colorCol, nameCol, descCol, countCol, actionsCol);
+                table.getItems().setAll(tags);
+
+                // Assemble
+                VBox content = new VBox(6, toolbar, table);
+                content.setPadding(new Insets(8));
+                VBox.setVgrow(table, Priority.ALWAYS);
+                dialog.getDialogPane().setContent(content);
+
+                createBtn.setOnAction(ev -> showCreateEditTagDialog(null));
                 dialog.showAndWait();
             }))
             .exceptionally(e -> {
@@ -1108,7 +1234,142 @@ public class MainWindow {
             });
     }
 
-    /** Show files bound to a specific tag in a dialog */
+    /** Confirm and delete a tag, then refresh the table. */
+    private void confirmAndDeleteTag(TagDTO tag, TableView<TagDTO> table, Label countLabel) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        styleDialog(confirm.getDialogPane());
+        confirm.setTitle("删除标签");
+        confirm.setHeaderText("确定要删除标签「" + tag.getName() + "」吗？");
+        confirm.setContentText("此操作不可恢复，该标签下的文件绑定将被清除。");
+        confirm.showAndWait().ifPresent(result -> {
+            if (result == ButtonType.OK) {
+                setBusy(true, "删除标签: " + tag.getName());
+                tagClient.deleteTag(tag.getId())
+                    .thenAccept(success -> Platform.runLater(() -> {
+                        setBusy(false, "标签已删除: " + tag.getName());
+                        addActivity("标签已删除: " + tag.getName());
+                        refreshTagTable(table, countLabel);
+                    }))
+                    .exceptionally(e -> {
+                        Platform.runLater(() -> {
+                            setBusy(false, "删除失败");
+                            showAlert("删除失败", cleanError(e));
+                        });
+                        return null;
+                    });
+            }
+        });
+    }
+
+    /** Create or edit a tag in a form dialog. Pass existing=null to create. */
+    private void showCreateEditTagDialog(TagDTO existing) {
+        boolean isEdit = existing != null;
+        javafx.scene.control.Dialog<ButtonType> dialog = new javafx.scene.control.Dialog<>();
+        styleDialog(dialog.getDialogPane());
+        dialog.setTitle(isEdit ? "编辑标签" : "新建标签");
+        dialog.setHeaderText(isEdit ? "修改标签「" + existing.getName() + "」" : "创建一个新的标签");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.getDialogPane().setPrefWidth(420);
+
+        GridPane form = new GridPane();
+        form.setHgap(10);
+        form.setVgap(12);
+        form.setPadding(new Insets(16));
+
+        // Name field
+        Label nameLbl = new Label("名称 *");
+        nameLbl.getStyleClass().add("bold-text");
+        TextField nameField = new TextField(isEdit ? existing.getName() : "");
+        nameField.setPromptText("标签名称（必填）");
+        nameField.setPrefWidth(280);
+
+        // Color picker
+        Label colorLbl = new Label("颜色");
+        colorLbl.getStyleClass().add("bold-text");
+        javafx.scene.control.ColorPicker colorPicker = new javafx.scene.control.ColorPicker();
+        if (isEdit && existing.getColor() != null) {
+            colorPicker.setValue(Color.web(existing.getColor()));
+        } else {
+            colorPicker.setValue(Color.web("#3B82F6"));
+        }
+        colorPicker.setPrefWidth(100);
+
+        // Description field
+        Label descLbl = new Label("描述");
+        descLbl.getStyleClass().add("bold-text");
+        TextArea descArea = new TextArea(isEdit && existing.getDescription() != null ? existing.getDescription() : "");
+        descArea.setPromptText("标签描述（可选）");
+        descArea.setPrefRowCount(3);
+        descArea.setPrefWidth(280);
+        descArea.setWrapText(true);
+
+        form.add(nameLbl, 0, 0);
+        form.add(nameField, 1, 0);
+        form.add(colorLbl, 0, 1);
+        form.add(colorPicker, 1, 1);
+        form.add(descLbl, 0, 2);
+        form.add(descArea, 1, 2);
+
+        dialog.getDialogPane().setContent(form);
+
+        // Disable OK until name is non-blank; validate on OK click
+        dialog.showAndWait().ifPresent(result -> {
+            if (result != ButtonType.OK) return;
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                showAlert("验证错误", "标签名称不能为空。");
+                return;
+            }
+            // Convert Color to hex string
+            String colorHex = "#" + colorPicker.getValue().toString().substring(2, 8);
+            String desc = descArea.getText().trim();
+
+            setBusy(true, isEdit ? "更新标签..." : "创建标签...");
+            if (isEdit) {
+                tagClient.updateTag(existing.getId(), name, colorHex, desc)
+                    .thenAccept(tag -> Platform.runLater(() -> {
+                        setBusy(false, "标签已更新: " + tag.getName());
+                        addActivity("标签已更新: " + tag.getName());
+                        // Refresh by reopening the manager — simplest approach
+                    }))
+                    .exceptionally(e -> {
+                        Platform.runLater(() -> {
+                            setBusy(false, "更新失败");
+                            showAlert("更新失败", cleanError(e));
+                        });
+                        return null;
+                    });
+            } else {
+                tagClient.createTag(name, colorHex, desc)
+                    .thenAccept(tag -> Platform.runLater(() -> {
+                        setBusy(false, "标签已创建: " + tag.getName());
+                        addActivity("标签已创建: " + tag.getName());
+                    }))
+                    .exceptionally(e -> {
+                        Platform.runLater(() -> {
+                            setBusy(false, "创建失败");
+                            showAlert("创建失败", cleanError(e));
+                        });
+                        return null;
+                    });
+            }
+        });
+    }
+
+    /** Reload tags from backend and update a TableView + count label. */
+    private void refreshTagTable(TableView<TagDTO> table, Label countLabel) {
+        tagClient.listTags()
+            .thenAccept(tags -> Platform.runLater(() -> {
+                table.getItems().setAll(tags);
+                countLabel.setText("共 " + tags.size() + " 个标签");
+            }))
+            .exceptionally(e -> {
+                Platform.runLater(() -> showAlert("刷新失败", cleanError(e)));
+                return null;
+            });
+    }
+
+    /** Show files bound to a specific tag in a dialog, with per-row unbind support. */
     private void showTagFilesDialog(TagDTO tag) {
         setBusy(true, "加载标签文件: " + tag.getName());
         tagClient.getFilesForTag(tag.getId())
@@ -1120,8 +1381,8 @@ public class MainWindow {
                 dialog.setTitle("标签: " + tag.getName());
                 String colorInfo = (tag.getColor() != null) ? "  [" + tag.getColor() + "]" : "";
                 dialog.setHeaderText("标签「" + tag.getName() + "」" + colorInfo + " — " + files.size() + " 个文件");
-                dialog.getDialogPane().setPrefWidth(620);
-                dialog.getDialogPane().setPrefHeight(420);
+                dialog.getDialogPane().setPrefWidth(820);
+                dialog.getDialogPane().setPrefHeight(440);
                 dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
                 VBox listBox = new VBox(4);
@@ -1133,42 +1394,103 @@ public class MainWindow {
                     emptyLabel.setWrapText(true);
                     listBox.getChildren().add(emptyLabel);
                 } else {
+                    // Rebuild helper — used after remove
+                    Runnable[] rebuildRef = new Runnable[1];
+
                     // Header row
-                    HBox header = new HBox(10);
+                    HBox header = new HBox(8);
                     header.getStyleClass().add("tag-table-header");
                     Label nameHdr = new Label("文件名");
                     nameHdr.getStyleClass().add("bold-text");
-                    nameHdr.setMinWidth(200);
+                    nameHdr.setMinWidth(140);
                     Label pathHdr = new Label("路径");
                     pathHdr.getStyleClass().add("hint-text");
-                    pathHdr.setMinWidth(280);
+                    pathHdr.setMinWidth(260);
                     Label sizeHdr = new Label("大小");
                     sizeHdr.getStyleClass().add("hint-text");
-                    sizeHdr.setMinWidth(80);
-                    header.getChildren().addAll(nameHdr, pathHdr, sizeHdr);
+                    sizeHdr.setMinWidth(72);
+                    Label actHdr = new Label("操作");
+                    actHdr.getStyleClass().add("hint-text");
+                    actHdr.setMinWidth(100);
+                    header.getChildren().addAll(nameHdr, pathHdr, sizeHdr, actHdr);
                     listBox.getChildren().add(header);
 
-                    for (var f : files) {
-                        HBox row = new HBox(10);
-                        row.setAlignment(Pos.CENTER_LEFT);
-                        row.setPadding(new Insets(4, 10, 4, 10));
-                        row.getStyleClass().add("file-detail-row");
+                    var filesRef = new java.util.ArrayList<>(files);
 
-                        Label nameLabel = new Label(nullToDash(f.getName()));
-                        nameLabel.setMinWidth(200);
-                        nameLabel.getStyleClass().add("file-name-label");
+                    rebuildRef[0] = () -> {
+                        // Clear all rows after header
+                        listBox.getChildren().remove(1, listBox.getChildren().size());
+                        for (var f : filesRef) {
+                            HBox row = new HBox(8);
+                            row.setAlignment(Pos.CENTER_LEFT);
+                            row.setPadding(new Insets(4, 8, 4, 8));
+                            row.getStyleClass().add("file-detail-row");
 
-                        Label pathLabel = new Label(nullToDash(f.getPath()));
-                        pathLabel.setMinWidth(280);
-                        pathLabel.getStyleClass().add("mono-label");
+                            // Truncate long names for display, show full in tooltip
+                            String rawName = nullToDash(f.getName());
+                            String displayName = rawName.length() > 26 ? rawName.substring(0, 23) + "..." : rawName;
+                            Label nameLabel = new Label(displayName);
+                            nameLabel.setMinWidth(140);
+                            nameLabel.setMaxWidth(160);
+                            nameLabel.getStyleClass().add("file-name-label");
+                            if (rawName.length() > 26) Tooltip.install(nameLabel, new Tooltip(rawName));
 
-                        Label sizeLabel = new Label(formatFileSize(f.getSizeBytes()));
-                        sizeLabel.setMinWidth(80);
-                        sizeLabel.getStyleClass().add("hint-text");
+                            // Truncate long paths (show tail), full path in tooltip
+                            String fullPath = nullToDash(f.getPath());
+                            String displayPath = fullPath.length() > 48
+                                ? "..." + fullPath.substring(fullPath.length() - 45)
+                                : fullPath;
+                            Label pathLabel = new Label(displayPath);
+                            pathLabel.setMinWidth(180);
+                            pathLabel.setMaxWidth(310);
+                            pathLabel.getStyleClass().add("mono-label");
+                            Tooltip.install(pathLabel, new Tooltip(fullPath));
 
-                        row.getChildren().addAll(nameLabel, pathLabel, sizeLabel);
-                        listBox.getChildren().add(row);
-                    }
+                            Label sizeLabel = new Label(formatFileSize(f.getSizeBytes()));
+                            sizeLabel.setMinWidth(72);
+                            sizeLabel.getStyleClass().add("hint-text");
+
+                            // Copy path button
+                            Button copyBtn = new Button("复制");
+                            copyBtn.getStyleClass().addAll("small-button", "tag-action-btn", "copy-path-btn");
+                            copyBtn.setOnAction(ev -> {
+                                javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+                                javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+                                content.putString(f.getPath());
+                                clipboard.setContent(content);
+                                addActivity("已复制路径: " + compact(f.getPath()));
+                            });
+
+                            Button removeBtn = new Button("移除");
+                            removeBtn.getStyleClass().addAll("small-button", "tag-action-btn", "danger-button");
+                            removeBtn.setOnAction(ev -> {
+                                setBusy(true, "解绑文件: " + f.getName());
+                                tagClient.unbindFileFromTag(tag.getId(), f.getId())
+                                    .thenAccept(r -> Platform.runLater(() -> {
+                                        setBusy(false, "已解绑: " + f.getName());
+                                        addActivity("从标签「" + tag.getName() + "」移除: " + f.getName());
+                                        filesRef.remove(f);
+                                        // Update header text
+                                        dialog.setHeaderText("标签「" + tag.getName() + "」" + colorInfo + " — " + filesRef.size() + " 个文件");
+                                        rebuildRef[0].run();
+                                    }))
+                                    .exceptionally(e -> {
+                                        Platform.runLater(() -> {
+                                            setBusy(false, "解绑失败");
+                                            showAlert("解绑失败", cleanError(e));
+                                        });
+                                        return null;
+                                    });
+                            });
+
+                            HBox actions = new HBox(4, copyBtn, removeBtn);
+                            actions.setAlignment(Pos.CENTER_LEFT);
+
+                            row.getChildren().addAll(nameLabel, pathLabel, sizeLabel, actions);
+                            listBox.getChildren().add(row);
+                        }
+                    };
+                    rebuildRef[0].run();
                 }
 
                 javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(listBox);
@@ -1287,12 +1609,6 @@ public class MainWindow {
         button.setMaxWidth(Double.MAX_VALUE);
         Tooltip.install(button, new Tooltip(tooltip));
         return button;
-    }
-
-    private Label createChip(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("tech-chip");
-        return label;
     }
 
     private VBox createMetric(String label, Label value) {

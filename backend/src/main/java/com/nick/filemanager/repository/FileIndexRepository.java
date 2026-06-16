@@ -22,8 +22,21 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
     /** Search files by name pattern (ILIKE for case-insensitive).
      *  Results are ranked: exact match → starts-with → alphabetical. */
     public Uni<List<FileIndex>> searchByName(String query, int offset, int limit) {
+        return searchByName(query, null, offset, limit);
+    }
+
+    /** Search by name with optional extension filter at DB level */
+    public Uni<List<FileIndex>> searchByName(String query, String extension, int offset, int limit) {
         String pattern = "%" + query + "%";
         String qLower = query.toLowerCase();
+        if (extension != null && !extension.isBlank()) {
+            return find(
+                "LOWER(name) LIKE LOWER(?1) AND LOWER(extension) = ?2 ORDER BY " +
+                "CASE WHEN LOWER(name) = ?3 THEN 0 WHEN LOWER(name) LIKE ?4 THEN 1 ELSE 2 END, name",
+                pattern, extension.toLowerCase(), qLower, qLower + "%")
+                .range(offset, offset + limit - 1)
+                .list();
+        }
         return find(
             "LOWER(name) LIKE LOWER(?1) ORDER BY " +
             "CASE WHEN LOWER(name) = ?2 THEN 0 WHEN LOWER(name) LIKE ?3 THEN 1 ELSE 2 END, name",
@@ -34,6 +47,15 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
 
     /** Count files matching name pattern */
     public Uni<Long> countByName(String query) {
+        return countByName(query, null);
+    }
+
+    /** Count by name with optional extension filter */
+    public Uni<Long> countByName(String query, String extension) {
+        if (extension != null && !extension.isBlank()) {
+            return count("LOWER(name) LIKE LOWER(?1) AND LOWER(extension) = ?2",
+                "%" + query + "%", extension.toLowerCase());
+        }
         return count("LOWER(name) LIKE LOWER(?1)", "%" + query + "%");
     }
 
@@ -42,6 +64,28 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
         return find("extension = ?1", extension.toLowerCase())
             .range(offset, offset + limit - 1)
             .list();
+    }
+
+    /** Count files by extension */
+    public Uni<Long> countByExtension(String extension) {
+        return count("extension = ?1", extension.toLowerCase());
+    }
+
+    /** Query all files with pagination (for extension-only or filter-only search).
+     *  Uses native query to avoid Hibernate Reactive internal state issues. */
+    public Uni<List<FileIndex>> findAll(int offset, int limit) {
+        return getSession().flatMap(session ->
+            session.createNativeQuery(
+                "SELECT * FROM file_index ORDER BY name OFFSET ?1 LIMIT ?2",
+                FileIndex.class)
+                .setParameter(1, offset)
+                .setParameter(2, limit)
+                .getResultList());
+    }
+
+    /** Count all files */
+    public Uni<Long> countAll() {
+        return count();
     }
 
     /** Files tagged with a given tag */

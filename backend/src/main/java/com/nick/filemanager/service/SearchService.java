@@ -54,18 +54,30 @@ public class SearchService {
         Uni<List<FileIndex>> resultsUni;
         Uni<Long> countUni;
 
-        if (query.getType() == SearchQuery.SearchType.CONTENT) {
-            resultsUni = fileRepo.fullTextSearch(query.getQ(),
-                query.getPage() * query.getSize(), query.getSize());
+        boolean emptyQuery = query.getQ() == null || query.getQ().isBlank();
+        String ext = query.getExtensionFilter();
+        int offset = query.getPage() * query.getSize();
+        int limit = query.getSize();
+
+        if (emptyQuery) {
+            // Extension-only or filter-only search
+            if (ext != null && !ext.isBlank()) {
+                resultsUni = fileRepo.findByExtension(ext, offset, limit);
+                countUni = fileRepo.countByExtension(ext);
+            } else {
+                resultsUni = fileRepo.findAll(offset, limit);
+                countUni = fileRepo.countAll();
+            }
+        } else if (query.getType() == SearchQuery.SearchType.CONTENT) {
+            resultsUni = fileRepo.fullTextSearch(query.getQ(), offset, limit);
             countUni = fileRepo.countFullTextSearch(query.getQ());
         } else if (query.isRegex()) {
-            resultsUni = fileRepo.regexSearch(query.getQ(),
-                query.getPage() * query.getSize(), query.getSize());
+            resultsUni = fileRepo.regexSearch(query.getQ(), offset, limit);
             countUni = fileRepo.countRegexSearch(query.getQ());
         } else {
-            resultsUni = fileRepo.searchByName(query.getQ(),
-                query.getPage() * query.getSize(), query.getSize());
-            countUni = fileRepo.countByName(query.getQ());
+            // Push extension filter to DB level for correct pagination
+            resultsUni = fileRepo.searchByName(query.getQ(), ext, offset, limit);
+            countUni = fileRepo.countByName(query.getQ(), ext);
         }
 
         return Uni.combine().all().unis(resultsUni, countUni)
@@ -73,11 +85,12 @@ public class SearchService {
             .flatMap(tuple -> {
                 List<FileIndex> results = tuple.getItem1();
                 long totalCount = tuple.getItem2();
-                // Apply advanced filters in-memory
+                // Apply size/date/rootPath filters in-memory
+                // Extension already handled at DB level for NAME and empty-query searches
                 List<FileIndex> filtered = applyFilters(results, query);
                 return Uni.createFrom().item(() -> {
                     SearchResult sr = new SearchResult();
-                    sr.query = query.getQ();
+                    sr.query = emptyQuery ? "" : query.getQ();
                     sr.files = filtered.stream().map(this::toFileInfo).collect(Collectors.toList());
                     sr.total = (int) totalCount;
                     sr.page = query.getPage();
@@ -139,7 +152,14 @@ public class SearchService {
     @WithTransaction
     public Uni<List<FileInfo>> exportResults(SearchQuery query) {
         Uni<List<FileIndex>> resultsUni;
-        if (query.getType() == SearchQuery.SearchType.CONTENT) {
+        boolean emptyQuery = query.getQ() == null || query.getQ().isBlank();
+        if (emptyQuery) {
+            if (query.getExtensionFilter() != null && !query.getExtensionFilter().isBlank()) {
+                resultsUni = fileRepo.findByExtension(query.getExtensionFilter(), 0, 1000);
+            } else {
+                resultsUni = fileRepo.findAll(0, 1000);
+            }
+        } else if (query.getType() == SearchQuery.SearchType.CONTENT) {
             resultsUni = fileRepo.fullTextSearch(query.getQ(), 0, 1000);
         } else if (query.isRegex()) {
             resultsUni = fileRepo.regexSearch(query.getQ(), 0, 1000);
@@ -182,7 +202,14 @@ public class SearchService {
     }
 
     private static String buildCacheKey(SearchQuery q) {
-        return String.format("search:%s:%s:%d:%d", q.getType().name(), q.getQ(), q.getPage(), q.getSize());
+        return String.format("search:%s:%s:%d:%d:ext=%s:p=%s:sz=%d-%d",
+            q.getType().name(),
+            q.getQ() != null ? q.getQ() : "",
+            q.getPage(), q.getSize(),
+            q.getExtensionFilter() != null ? q.getExtensionFilter() : "",
+            q.getRootPath() != null ? q.getRootPath() : "",
+            q.getSizeMin() != null ? q.getSizeMin() : -1,
+            q.getSizeMax() != null ? q.getSizeMax() : -1);
     }
 
     private FileInfo toFileInfo(FileIndex fi) {
