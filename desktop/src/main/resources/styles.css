@@ -560,3 +560,81 @@
     -fx-text-fill: #f8f8ff;
     -fx-font-family: "Cascadia Mono", "Consolas", monospace;
 }
+
+/* ---- Tag Manager Dialog ---- */
+.tag-row {
+    -fx-background-color: #10143d;
+    -fx-background-radius: 6px;
+    -fx-border-color: #244dff;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+.tag-row:hover {
+    -fx-background-color: #182184;
+    -fx-border-color: #00f0ff;
+}
+
+.file-detail-row {
+    -fx-background-color: #090b2a;
+    -fx-background-radius: 4px;
+}
+
+.file-detail-row:hover {
+    -fx-background-color: #10143d;
+}
+
+.tag-table-header {
+    -fx-background-color: #08081a;
+    -fx-background-radius: 4px 4px 0 0;
+    -fx-padding: 6px 10px;
+}
+
+.tag-table-header .label {
+    -fx-text-fill: #fff36d;
+    -fx-font-size: 12px;
+    -fx-font-weight: 900;
+}
+
+.bold-text {
+    -fx-font-weight: 900;
+}
+
+.file-name-label {
+    -fx-text-fill: #f8f8ff;
+    -fx-font-weight: 700;
+}
+
+.mono-label {
+    -fx-text-fill: #c8d3ff;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+}
+
+.small-button {
+    -fx-cursor: hand;
+    -fx-background-color: #10143d;
+    -fx-border-color: #244dff;
+    -fx-border-width: 2px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-text-fill: #f8f8ff;
+    -fx-padding: 5px 12px;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+}
+
+.small-button:hover {
+    -fx-background-color: #182184;
+    -fx-border-color: #00f0ff;
+    -fx-text-fill: #fff36d;
+}
+
+.edge-to-edge {
+    -fx-padding: 0px;
+    -fx-background-color: transparent;
+}
+
+.edge-to-edge > .viewport {
+    -fx-background-color: transparent;
+}

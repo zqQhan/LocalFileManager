@@ -43,7 +43,7 @@ public class FileApiClient {
 
     /** Search files by name, content, or both. */
     public CompletableFuture<List<FileInfo>> search(String query, String type, int page, int size) {
-        return search(query, type, page, size, false, null);
+        return search(query, type, page, size, false, null, null);
     }
 
     /** Search files with advanced filters supported by the backend. */
@@ -54,11 +54,26 @@ public class FileApiClient {
             int size,
             boolean regex,
             String extension) {
+        return search(query, type, page, size, regex, extension, null);
+    }
+
+    /** Search files with advanced filters including rootPath scope. */
+    public CompletableFuture<List<FileInfo>> search(
+            String query,
+            String type,
+            int page,
+            int size,
+            boolean regex,
+            String extension,
+            String rootPath) {
         StringBuilder url = new StringBuilder(String.format(
             "%s/api/files/search?q=%s&type=%s&page=%d&size=%d&regex=%s",
             baseUrl, urlEncode(query), urlEncode(type), page, size, regex));
         if (extension != null && !extension.isBlank()) {
             url.append("&extension=").append(urlEncode(extension.trim().replaceFirst("^\\.", "")));
+        }
+        if (rootPath != null && !rootPath.isBlank()) {
+            url.append("&rootPath=").append(urlEncode(rootPath));
         }
         return getAsync(url.toString(), new TypeReference<Map<String, Object>>() {})
             .thenApply(map -> {
@@ -70,12 +85,15 @@ public class FileApiClient {
     }
 
     /** Export search results as CSV or JSON text. */
-    public CompletableFuture<String> exportSearch(String query, String type, boolean regex, String extension, String format) {
+    public CompletableFuture<String> exportSearch(String query, String type, boolean regex, String extension, String format, String rootPath) {
         StringBuilder url = new StringBuilder(String.format(
             "%s/api/files/search/export?q=%s&type=%s&regex=%s&format=%s",
             baseUrl, urlEncode(query), urlEncode(type), regex, urlEncode(format)));
         if (extension != null && !extension.isBlank()) {
             url.append("&extension=").append(urlEncode(extension.trim().replaceFirst("^\\.", "")));
+        }
+        if (rootPath != null && !rootPath.isBlank()) {
+            url.append("&rootPath=").append(urlEncode(rootPath));
         }
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(url.toString()))

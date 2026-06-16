@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "search_history", indexes = {
-    @Index(name = "idx_sh_searched_at", columnList = "searchedAt")
+    @Index(name = "idx_sh_searched_at", columnList = "searched_at")
 })
 public class SearchHistory extends PanacheEntity {
 

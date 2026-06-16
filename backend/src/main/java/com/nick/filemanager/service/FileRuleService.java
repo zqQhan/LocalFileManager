@@ -2,8 +2,8 @@ package com.nick.filemanager.service;
 
 import com.nick.filemanager.model.entity.FileRule;
 import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -78,7 +78,7 @@ public class FileRuleService {
                 // Path safety check
                 guard.checkSafe(root.toString(), rule.actionType.toLowerCase());
 
-                // Step 1: walk files on worker thread (I/O only, no DB)
+                // Step 1: walk files on worker thread (I/O only, no DB — offloaded)
                 return Uni.createFrom().item(() -> {
                     AtomicInteger matched = new AtomicInteger(0);
                     AtomicInteger affected = new AtomicInteger(0);
@@ -98,8 +98,10 @@ public class FileRuleService {
                         });
                     } catch (IOException ignored) {}
                     return new int[]{matched.get(), affected.get()};
+                })
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
                 // Step 2: persist result via reactive chain (back on event loop)
-                }).flatMap(counts -> {
+                .flatMap(counts -> {
                     rule.lastRunAt = LocalDateTime.now();
                     rule.filesAffected = counts[1];
                     return rule.<FileRule>persist()

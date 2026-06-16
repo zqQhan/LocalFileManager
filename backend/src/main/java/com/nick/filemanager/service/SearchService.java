@@ -68,28 +68,44 @@ public class SearchService {
             countUni = fileRepo.countByName(query.getQ());
         }
 
-        return resultsUni.flatMap(results -> {
-            // Apply advanced filters in-memory
-            List<FileIndex> filtered = applyFilters(results, query);
-            return Uni.createFrom().item(() -> {
-                SearchResult sr = new SearchResult();
-                sr.query = query.getQ();
-                sr.files = filtered.stream().map(this::toFileInfo).collect(Collectors.toList());
-                sr.total = filtered.size();
-                sr.page = query.getPage();
-                sr.size = query.getSize();
-                return sr;
+        return Uni.combine().all().unis(resultsUni, countUni)
+            .asTuple()
+            .flatMap(tuple -> {
+                List<FileIndex> results = tuple.getItem1();
+                long totalCount = tuple.getItem2();
+                // Apply advanced filters in-memory
+                List<FileIndex> filtered = applyFilters(results, query);
+                return Uni.createFrom().item(() -> {
+                    SearchResult sr = new SearchResult();
+                    sr.query = query.getQ();
+                    sr.files = filtered.stream().map(this::toFileInfo).collect(Collectors.toList());
+                    sr.total = (int) totalCount;
+                    sr.page = query.getPage();
+                    sr.size = query.getSize();
+                    return sr;
+                });
             });
-        });
     }
 
-    /** Apply size/date/extension filters in-memory (post-DB query) */
+    /** Apply size/date/extension/path filters in-memory (post-DB query) */
     private List<FileIndex> applyFilters(List<FileIndex> files, SearchQuery query) {
         // Pre-validate dates — fail fast with clear error
         var from = parseDate(query.getDateFrom(), "dateFrom");
         var to = parseDate(query.getDateTo(), "dateTo");
 
         var stream = files.stream();
+        // Restrict search to a directory subtree
+        if (query.getRootPath() != null && !query.getRootPath().isBlank()) {
+            // Normalize separators: URL may use / but filesystem uses \ on Windows
+            String normalized = query.getRootPath().replace("/", java.io.File.separator);
+            if (!normalized.endsWith(java.io.File.separator)) {
+                normalized += java.io.File.separator;
+            }
+            final String finalPrefix = normalized;
+            final String rootExact = query.getRootPath().replace("/", java.io.File.separator);
+            stream = stream.filter(f -> f.path != null
+                && (f.path.equals(rootExact) || f.path.startsWith(finalPrefix)));
+        }
         if (query.getExtensionFilter() != null && !query.getExtensionFilter().isBlank()) {
             stream = stream.filter(f -> f.extension != null
                 && f.extension.equalsIgnoreCase(query.getExtensionFilter()));

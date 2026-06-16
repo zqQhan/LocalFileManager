@@ -33,7 +33,7 @@ public class StatsService {
                 // By extension
                 Map<String, Long> byExt = files.stream()
                     .collect(Collectors.groupingBy(
-                        f -> f.extension.isBlank() ? "(no ext)" : f.extension,
+                        f -> f.extension == null || f.extension.isBlank() ? "(no ext)" : f.extension,
                         Collectors.counting()));
                 Map<String, Long> topExt = byExt.entrySet().stream()
                     .sorted(Map.Entry.<String, Long>comparingByValue().reversed())

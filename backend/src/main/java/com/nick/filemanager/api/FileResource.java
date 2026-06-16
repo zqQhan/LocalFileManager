@@ -6,6 +6,7 @@ import com.nick.filemanager.messaging.FileIndexProducer;
 import com.nick.filemanager.service.FileService;
 import com.nick.filemanager.service.IndexService;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -46,8 +47,14 @@ public class FileResource {
         }
         return fileService.browseDirectory(path)
             .map(files -> Response.ok(files).build())
-            .onFailure().recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
-                .entity(Map.of("error", e.getMessage())).build());
+            .onFailure(IllegalArgumentException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", e.getMessage())).build())
+            .onFailure(SecurityException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.FORBIDDEN)
+                    .entity(Map.of("error", e.getMessage())).build())
+            .onFailure().recoverWithItem(e -> Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(Map.of("error", "目录加载失败: " + (e.getMessage() != null ? e.getMessage() : "未知错误"))).build());
     }
 
     // ---- Copy ----
@@ -141,37 +148,43 @@ public class FileResource {
         if (path == null || path.isBlank()) {
             return Uni.createFrom().item(badRequest("path is required"));
         }
-        try {
-            var files = java.nio.file.Files.walk(java.nio.file.Path.of(path))
-                .filter(java.nio.file.Files::isRegularFile)
-                .filter(java.nio.file.Files::isReadable)
-                .limit(10)
-                .map(p -> p.toAbsolutePath().toString())
-                .toList();
 
-            if (files.isEmpty()) {
-                return Uni.createFrom().item(Response.ok(Map.of(
-                    "status", "empty", "totalFiles", 0
-                )).build());
-            }
-
-            // Send first file to Kafka to demonstrate connectivity
-            return fileIndexProducer.sendForIndexing(files.get(0))
-                .map(v -> Response.accepted(Map.of(
-                    "status", "queued",
-                    "sent", 1,
-                    "totalFiles", files.size(),
-                    "firstFile", files.get(0)
-                )).build())
-                .onFailure().recoverWithItem(e ->
-                    Response.ok(Map.of(
-                        "status", "kafka_unavailable",
-                        "error", e.getMessage(),
-                        "totalFiles", files.size()
+        // Offload file walking to worker thread (blocking I/O)
+        return Uni.createFrom().item(() -> {
+                try {
+                    return java.nio.file.Files.walk(java.nio.file.Path.of(path))
+                        .filter(java.nio.file.Files::isRegularFile)
+                        .filter(java.nio.file.Files::isReadable)
+                        .limit(10)
+                        .map(p -> p.toAbsolutePath().toString())
+                        .toList();
+                } catch (Exception e) {
+                    throw new RuntimeException(e.getMessage(), e);
+                }
+            })
+            .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+            .flatMap(files -> {
+                if (files.isEmpty()) {
+                    return Uni.createFrom().item(Response.ok(Map.of(
+                        "status", "empty", "totalFiles", 0
                     )).build());
-        } catch (Exception e) {
-            return Uni.createFrom().item(badRequest(e.getMessage()));
-        }
+                }
+
+                // Send first file to Kafka to demonstrate connectivity
+                return fileIndexProducer.sendForIndexing(files.get(0))
+                    .map(v -> Response.accepted(Map.of(
+                        "status", "queued",
+                        "sent", 1,
+                        "totalFiles", files.size(),
+                        "firstFile", files.get(0)
+                    )).build())
+                    .onFailure().recoverWithItem(e ->
+                        Response.ok(Map.of(
+                            "status", "kafka_unavailable",
+                            "error", e.getMessage(),
+                            "totalFiles", files.size()
+                        )).build());
+            });
     }
 
     // ---- Health check ----

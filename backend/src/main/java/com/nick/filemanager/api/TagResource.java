@@ -64,4 +64,56 @@ public class TagResource {
                 ? Response.noContent().build()
                 : Response.status(Response.Status.NOT_FOUND).build());
     }
+
+    // ---- File-Tag binding ----
+
+    @POST
+    @Path("/{tagId}/files")
+    @Operation(summary = "Bind a file to a tag")
+    public Uni<Response> addFile(
+            @PathParam("tagId") Long tagId,
+            Map<String, String> body) {
+        if (body == null) {
+            return Uni.createFrom().item(
+                Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", "Request body is required (JSON with filePath)")).build());
+        }
+        String filePath = body.get("filePath");
+        if (filePath == null || filePath.isBlank()) {
+            return Uni.createFrom().item(
+                Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", "filePath is required")).build());
+        }
+        return tagService.addFileToTag(tagId, filePath)
+            .map(tag -> Response.ok(tag).build())
+            .onFailure(IllegalArgumentException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", e.getMessage())).build())
+            .onFailure().recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
+                .entity(Map.of("error", e.getMessage() != null ? e.getMessage() : e.toString())).build());
+    }
+
+    @DELETE
+    @Path("/{tagId}/files/{fileId}")
+    @Operation(summary = "Remove a file from a tag")
+    public Uni<Response> removeFile(
+            @PathParam("tagId") Long tagId,
+            @PathParam("fileId") Long fileId) {
+        return tagService.removeFileFromTag(tagId, fileId)
+            .map(tag -> Response.ok(tag).build())
+            .onFailure(IllegalArgumentException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", e.getMessage())).build());
+    }
+
+    @GET
+    @Path("/{tagId}/files")
+    @Operation(summary = "List files bound to a tag")
+    public Uni<Response> listFiles(@PathParam("tagId") Long tagId) {
+        return tagService.getFilesForTag(tagId)
+            .map(files -> Response.ok(files).build())
+            .onFailure(IllegalArgumentException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("error", e.getMessage())).build());
+    }
 }

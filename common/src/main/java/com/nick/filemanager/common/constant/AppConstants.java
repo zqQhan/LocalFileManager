@@ -25,6 +25,7 @@ public final class AppConstants {
     // File processing
     public static final int CONTENT_PREVIEW_MAX_CHARS = 2000;
     public static final long MAX_FILE_SIZE_FOR_PREVIEW = 10 * 1024 * 1024; // 10 MB
+    public static final long MAX_FILE_SIZE_FOR_HASH = 10 * 1024 * 1024;    // 10 MB — SHA-256 reads entire file into memory
     public static final String HASH_ALGORITHM = "SHA-256";
 
     // Batch status

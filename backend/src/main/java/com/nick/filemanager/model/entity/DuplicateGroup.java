@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "duplicate_group", indexes = {
-    @Index(name = "idx_dg_hash", columnList = "contentHash")
+    @Index(name = "idx_dg_hash", columnList = "content_hash")
 })
 public class DuplicateGroup extends PanacheEntity {
 

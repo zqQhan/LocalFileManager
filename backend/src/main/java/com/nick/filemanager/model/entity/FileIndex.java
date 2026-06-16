@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_file_path", columnList = "path"),
     @Index(name = "idx_file_name", columnList = "name"),
     @Index(name = "idx_file_extension", columnList = "extension"),
-    @Index(name = "idx_file_content_hash", columnList = "contentHash")
+    @Index(name = "idx_file_content_hash", columnList = "content_hash")
 })
 public class FileIndex extends PanacheEntity {
 

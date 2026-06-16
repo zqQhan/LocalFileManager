@@ -83,8 +83,7 @@ public class SearchResource {
 
     @GET
     @Path("/export")
-    @Produces("text/csv")
-    @Operation(summary = "Export search results as CSV")
+    @Operation(summary = "Export search results as CSV or JSON")
     public Uni<Response> export(
             @QueryParam("q") String query,
             @QueryParam("type") @DefaultValue("NAME") String type,
@@ -94,7 +93,8 @@ public class SearchResource {
             @QueryParam("sizeMax") Long sizeMax,
             @QueryParam("dateFrom") String dateFrom,
             @QueryParam("dateTo") String dateTo,
-            @QueryParam("format") @DefaultValue("csv") String format) {
+            @QueryParam("format") @DefaultValue("csv") String format,
+            @QueryParam("rootPath") String rootPath) {
 
         if (query == null || query.isBlank()) {
             return Uni.createFrom().item(Response.status(400)
@@ -115,6 +115,7 @@ public class SearchResource {
         sq.setSize(1000);
         sq.setRegex(regex);
         sq.setExtensionFilter(extension);
+        sq.setRootPath(rootPath);
         sq.setSizeMin(sizeMin);
         sq.setSizeMax(sizeMax);
         sq.setDateFrom(dateFrom);
@@ -123,7 +124,9 @@ public class SearchResource {
         return searchService.exportResults(sq)
             .map(files -> {
                 if ("json".equalsIgnoreCase(format)) {
-                    return Response.ok(files).build();
+                    return Response.ok(files)
+                        .header("Content-Disposition", "attachment; filename=search-results.json")
+                        .build();
                 }
                 // CSV format
                 StringBuilder csv = new StringBuilder("Name,Path,Extension,Size(Bytes),Modified,MIME\n");
@@ -133,6 +136,7 @@ public class SearchResource {
                         f.getSizeBytes(), f.getModifiedAt(), f.getMimeType()));
                 }
                 return Response.ok(csv.toString())
+                    .type("text/csv")
                     .header("Content-Disposition", "attachment; filename=search-results.csv")
                     .build();
             })

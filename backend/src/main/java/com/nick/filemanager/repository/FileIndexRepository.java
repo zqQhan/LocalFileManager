@@ -4,6 +4,7 @@ import com.nick.filemanager.model.entity.FileIndex;
 import io.quarkus.hibernate.reactive.panache.PanacheRepositoryBase;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -18,9 +19,15 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
         return find("path", path).firstResult();
     }
 
-    /** Search files by name pattern (ILIKE for case-insensitive) */
+    /** Search files by name pattern (ILIKE for case-insensitive).
+     *  Results are ranked: exact match → starts-with → alphabetical. */
     public Uni<List<FileIndex>> searchByName(String query, int offset, int limit) {
-        return find("LOWER(name) LIKE LOWER(?1)", "%" + query + "%")
+        String pattern = "%" + query + "%";
+        String qLower = query.toLowerCase();
+        return find(
+            "LOWER(name) LIKE LOWER(?1) ORDER BY " +
+            "CASE WHEN LOWER(name) = ?2 THEN 0 WHEN LOWER(name) LIKE ?3 THEN 1 ELSE 2 END, name",
+            pattern, qLower, qLower + "%")
             .range(offset, offset + limit - 1)
             .list();
     }
@@ -63,38 +70,32 @@ public class FileIndexRepository implements PanacheRepositoryBase<FileIndex, Lon
             .list();
     }
 
-    /** Regex search — Java-side regex, automatically makes it a "contains" search */
+    /** Regex search — uses PostgreSQL native ~* operator for server-side
+     *  case-insensitive regex matching. This avoids loading all records into
+     *  memory and sidesteps Hibernate Reactive internal state issues. */
     public Uni<List<FileIndex>> regexSearch(String pattern, int offset, int limit) {
-        return listAll()
-            .map(all -> all.stream()
-                .filter(f -> {
-                    try {
-                        return java.util.regex.Pattern
-                            .compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
-                            .matcher(f.name).find();
-                    } catch (Exception e) { return false; }
-                })
-                .skip(offset)
-                .limit(limit)
-                .toList());
+        return getSession().flatMap(session ->
+            session.createNativeQuery(
+                "SELECT * FROM file_index WHERE name ~* ?1 ORDER BY name OFFSET ?2 LIMIT ?3",
+                FileIndex.class)
+                .setParameter(1, pattern)
+                .setParameter(2, offset)
+                .setParameter(3, limit)
+                .getResultList());
     }
 
     public Uni<Long> countRegexSearch(String pattern) {
-        return listAll()
-            .map(all -> all.stream()
-                .filter(f -> {
-                    try {
-                        return java.util.regex.Pattern
-                            .compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
-                            .matcher(f.name).find();
-                    } catch (Exception e) { return false; }
-                })
-                .count());
+        return getSession().flatMap(session ->
+            session.createNativeQuery(
+                "SELECT count(*) FROM file_index WHERE name ~* ?1")
+                .setParameter(1, pattern)
+                .getSingleResult()
+                .map(r -> ((Number) r).longValue()));
     }
 
-    /** Full-text search on content snippet (ILIKE for HQL compatibility) */
+    /** Full-text search on content snippet (ILIKE for HQL compatibility), ordered by name */
     public Uni<List<FileIndex>> fullTextSearch(String query, int offset, int limit) {
-        return find("LOWER(contentSnippet) LIKE LOWER(?1)", "%" + query + "%")
+        return find("LOWER(contentSnippet) LIKE LOWER(?1) ORDER BY name", "%" + query + "%")
             .range(offset, offset + limit - 1)
             .list();
     }

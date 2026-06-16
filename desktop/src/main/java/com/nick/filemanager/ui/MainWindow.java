@@ -285,8 +285,8 @@ public class MainWindow {
 
         VBox shortcuts = new VBox(8);
         shortcuts.getChildren().addAll(
-            createNavButton("Home", USER_HOME),
-            createNavButton("Documents", USER_HOME + File.separator + "Documents")
+            createNavButton("主目录", USER_HOME),
+            createNavButton("文档", USER_HOME + File.separator + "Documents")
         );
 
         Separator separator = new Separator();
@@ -300,9 +300,9 @@ public class MainWindow {
         open.setOnAction(e -> chooseAndBrowse("选择工作目录"));
         Button scan = createSideAction("扫描重复文件", "选择一个目录后扫描重复文件");
         scan.setOnAction(e -> chooseAndScanDuplicates());
-        Button asyncIndex = createSideAction("异步索引状态", "说明后端 Kafka 异步索引当前问题");
+        Button asyncIndex = createSideAction("异步索引状态", "查看 Kafka 异步索引功能的状态");
         asyncIndex.setOnAction(e -> showAsyncIndexNotice());
-        Button tags = createSideAction("查看标签", "查看后端已有标签");
+        Button tags = createSideAction("查看标签", "查看和管理文件标签");
         tags.setOnAction(e -> showTagManager());
         ops.getChildren().addAll(open, scan, asyncIndex, tags);
 
@@ -311,7 +311,7 @@ public class MainWindow {
 
         VBox backendCard = new VBox(8);
         backendCard.getStyleClass().add("backend-card");
-        Label backendTitle = new Label("Backend");
+        Label backendTitle = new Label("后端服务");
         backendTitle.getStyleClass().add("mini-title");
         Label backend = new Label(backendUrl);
         backend.getStyleClass().add("mono-muted");
@@ -372,10 +372,10 @@ public class MainWindow {
         selectionNameLabel.getStyleClass().add("detail-name");
         selectionMetaLabel = new Label("双击目录进入，右键执行文件操作");
         selectionMetaLabel.getStyleClass().add("detail-meta");
-        selectionPathLabel = new Label("Path: -");
+        selectionPathLabel = new Label("路径: -");
         selectionPathLabel.getStyleClass().add("detail-path");
         selectionPathLabel.setWrapText(true);
-        selectionHashLabel = new Label("Hash: -");
+        selectionHashLabel = new Label("哈希: -");
         selectionHashLabel.getStyleClass().add("mono-muted");
         selectionHashLabel.setWrapText(true);
         detailCard.getChildren().addAll(selectionNameLabel, selectionMetaLabel, selectionPathLabel, selectionHashLabel);
@@ -391,10 +391,10 @@ public class MainWindow {
         totalSizeMetric = createMetricValue("—");
         duplicateMetric = createMetricValue("—");
         uniqueMetric = createMetricValue("—");
-        metrics.add(createMetric("Files", totalFilesMetric), 0, 0);
-        metrics.add(createMetric("Size", totalSizeMetric), 1, 0);
-        metrics.add(createMetric("Dupes", duplicateMetric), 0, 1);
-        metrics.add(createMetric("Hashes", uniqueMetric), 1, 1);
+        metrics.add(createMetric("文件数", totalFilesMetric), 0, 0);
+        metrics.add(createMetric("总大小", totalSizeMetric), 1, 0);
+        metrics.add(createMetric("重复组", duplicateMetric), 0, 1);
+        metrics.add(createMetric("唯一哈希", uniqueMetric), 1, 1);
 
         VBox largestCard = new VBox(8);
         largestCard.getStyleClass().add("detail-card");
@@ -440,8 +440,8 @@ public class MainWindow {
     // ---- Table ----
 
     private void configureTableColumns() {
-        TableColumn<FileInfo, String> signalCol = new TableColumn<>("信号");
-        signalCol.setCellValueFactory(data -> new SimpleStringProperty(Boolean.TRUE.equals(data.getValue().getIsDirectory()) ? "DIR" : "FILE"));
+        TableColumn<FileInfo, String> signalCol = new TableColumn<>("类型");
+        signalCol.setCellValueFactory(data -> new SimpleStringProperty(Boolean.TRUE.equals(data.getValue().getIsDirectory()) ? "目录" : "文件"));
         signalCol.setMaxWidth(72);
         signalCol.setMinWidth(72);
         signalCol.setCellFactory(col -> new TableCell<>() {
@@ -647,8 +647,8 @@ public class MainWindow {
         lastSearchQuery = query;
         lastSearchType = type;
 
-        setBusy(true, "正在搜索: " + query);
-        fileClient.search(query, type, 0, 80, regex, extension)
+        setBusy(true, "正在搜索: " + query + "  范围: " + currentDirectory);
+        fileClient.search(query, type, 0, 80, regex, extension, currentDirectory)
             .thenAccept(result -> Platform.runLater(() -> {
                 fileTable.getItems().setAll(result);
                 resultCountLabel.setText("找到 " + result.size() + " 个结果 · " + (regex ? "正则搜索" : "普通搜索"));
@@ -659,7 +659,7 @@ public class MainWindow {
             .exceptionally(e -> {
                 Platform.runLater(() -> {
                     setBusy(false, "搜索失败");
-                    addActivity("Search failed: " + cleanError(e));
+                    addActivity("搜索失败: " + cleanError(e));
                     showAlert("搜索错误", cleanError(e));
                 });
                 return null;
@@ -695,7 +695,7 @@ public class MainWindow {
         }
 
         setBusy(true, "正在导出 CSV: " + query);
-        fileClient.exportSearch(query, lastSearchType, regexCheck.isSelected(), extensionField.getText(), "csv")
+        fileClient.exportSearch(query, lastSearchType, regexCheck.isSelected(), extensionField.getText(), "csv", currentDirectory)
             .thenAccept(csv -> Platform.runLater(() -> {
                 setBusy(false, "导出完成");
                 showExportPreview(csv);
@@ -719,7 +719,7 @@ public class MainWindow {
         fileClient.getDashboard()
             .thenAccept(stats -> Platform.runLater(() -> updateDashboard(stats)))
             .exceptionally(e -> {
-                Platform.runLater(() -> addActivity("Stats unavailable: " + cleanError(e)));
+                Platform.runLater(() -> addActivity("统计数据不可用: " + cleanError(e)));
                 return null;
             });
     }
@@ -744,8 +744,12 @@ public class MainWindow {
             .thenAccept(result -> Platform.runLater(() -> {
                 String msg = summarizeDuplicateResult(result);
                 setBusy(false, msg);
-                addActivity("Duplicate scan: " + msg);
-                showAlert("重复文件扫描", msg);
+                addActivity("重复扫描: " + msg);
+                if (result instanceof List<?> list && !list.isEmpty()) {
+                    showDuplicateDetailDialog(list);
+                } else {
+                    showAlert("重复文件扫描", msg);
+                }
                 refreshDashboard();
             }))
             .exceptionally(e -> {
@@ -757,60 +761,178 @@ public class MainWindow {
             });
     }
 
+    /** Show a scrollable dialog with detailed duplicate group info */
+    @SuppressWarnings("unchecked")
+    private void showDuplicateDetailDialog(List<?> groups) {
+        StringBuilder sb = new StringBuilder();
+        int groupNum = 1;
+        long totalWasted = 0;
+        for (Object g : groups) {
+            if (!(g instanceof Map<?, ?> rawMap)) continue;
+            Map<?, ?> map = rawMap;
+            Object fcObj = map.get("fileCount");
+            int fileCount = fcObj instanceof Number n ? n.intValue() : 0;
+            Object tsObj = map.get("totalSize");
+            long totalSize = tsObj instanceof Number n ? n.longValue() : 0;
+            String hash = stringValue(map.get("contentHash"));
+            String shortHash = hash.length() > 12 ? hash.substring(0, 12) + "..." : hash;
+            totalWasted += totalSize - (totalSize / fileCount); // wasted space = total - one copy
+
+            sb.append("── 重复组 ").append(groupNum++).append(" ───────────────────────────\n");
+            sb.append("哈希: ").append(shortHash).append("\n");
+            sb.append("文件数: ").append(fileCount).append("  浪费空间: ").append(formatFileSize(totalSize - (totalSize / fileCount))).append("\n\n");
+
+            Object dups = map.get("duplicates");
+            if (dups instanceof List<?> dupList) {
+                for (int i = 0; i < dupList.size(); i++) {
+                    Object d = dupList.get(i);
+                    if (d instanceof Map<?, ?> dm) {
+                        String name = stringValue(dm.get("name"));
+                        String fpath = stringValue(dm.get("path"));
+                        long size = dm.get("sizeBytes") instanceof Number n ? n.longValue() : 0;
+                        sb.append("  ").append(i + 1).append(". ").append(name).append("\n");
+                        sb.append("     路径: ").append(fpath).append("\n");
+                        sb.append("     大小: ").append(formatFileSize(size)).append("\n");
+                    }
+                }
+            }
+            sb.append("\n");
+        }
+        sb.append("总计: ").append(groups.size()).append(" 个重复组, 预估浪费空间 ")
+          .append(formatFileSize(totalWasted));
+
+        TextArea area = new TextArea(sb.toString());
+        area.setEditable(false);
+        area.setWrapText(false);
+        area.setPrefSize(700, 440);
+        area.getStyleClass().add("export-preview");
+
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        styleDialog(alert.getDialogPane());
+        alert.setTitle("重复文件扫描结果");
+        alert.setHeaderText("发现 " + groups.size() + " 个重复组。以下是具体文件列表：");
+        alert.getDialogPane().setContent(area);
+        alert.show();
+    }
+
     private void showAsyncIndexNotice() {
         showAlert(
-            "异步索引暂不调用",
-            "后端 Kafka 异步索引接口存在消费者线程问题。\n\n触发现象：调用 /api/files/index/async 后，后端健康检查会出现 FileIndexConsumer#processIndexTask 的 HR000068 错误，服务状态变为 DOWN。\n\n这个属于后端实现问题，本次前端只做说明，不主动调用该接口。");
+            "异步索引状态",
+            "Kafka 异步索引功能已可用。\n\n"
+            + "FileIndexConsumer 已修复（阻塞 I/O 已卸载到 worker 线程，\n"
+            + "响应式数据库事务在 event loop 上运行 — 不再有 HR000068 错误）。\n\n"
+            + "点击「索引当前目录」按钮即可触发异步索引。");
     }
 
     // ---- File operations ----
 
     private void promptAndCopy(String source) {
-        TextInputDialog dialog = new TextInputDialog(source + ".copy");
-        styleDialog(dialog.getDialogPane());
-        dialog.setTitle("复制文件");
-        dialog.setHeaderText("复制: " + new File(source).getName());
-        dialog.setContentText("目标路径:");
-        dialog.showAndWait().ifPresent(dest -> {
-            setBusy(true, "复制中...");
-            fileClient.copyFile(source, dest)
-                .thenAccept(fi -> Platform.runLater(() -> {
-                    setBusy(false, "已复制: " + dest);
-                    addActivity("Copy: " + new File(source).getName());
-                    refreshCurrentDirectory();
-                }))
-                .exceptionally(e -> {
-                    Platform.runLater(() -> {
-                        setBusy(false, "复制失败");
-                        showAlert("错误", cleanError(e));
-                    });
-                    return null;
+        File srcFile = new File(source);
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("选择复制目标文件夹 — " + srcFile.getName());
+        // Start from the source file's parent, or current directory, or user home
+        File startDir = srcFile.getParentFile();
+        if (startDir != null && startDir.isDirectory()) {
+            chooser.setInitialDirectory(startDir);
+        } else if (currentDirectory != null) {
+            chooser.setInitialDirectory(new File(currentDirectory));
+        } else {
+            chooser.setInitialDirectory(new File(USER_HOME));
+        }
+        File chosen = chooser.showDialog(root.getScene().getWindow());
+        if (chosen == null) return;
+
+        String dest = new File(chosen, srcFile.getName()).getAbsolutePath();
+        // If destination equals source, suggest a different name
+        if (dest.equals(source)) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            styleDialog(alert.getDialogPane());
+            alert.setTitle("复制失败");
+            alert.setHeaderText(null);
+            alert.setContentText("目标文件夹与源文件夹相同，请选择其他文件夹。");
+            alert.show();
+            return;
+        }
+        // If destination file already exists, ask for overwrite
+        if (new File(dest).exists()) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            styleDialog(confirm.getDialogPane());
+            confirm.setTitle("文件已存在");
+            confirm.setHeaderText("目标位置已存在同名文件: " + srcFile.getName());
+            confirm.setContentText("是否覆盖?\n\n目标: " + dest);
+            boolean overwrite = confirm.showAndWait().map(r -> r == ButtonType.OK).orElse(false);
+            if (!overwrite) return;
+        }
+
+        final String target = dest;
+        setBusy(true, "复制中...");
+        fileClient.copyFile(source, target)
+            .thenAccept(fi -> Platform.runLater(() -> {
+                setBusy(false, "已复制到: " + chosen.getAbsolutePath());
+                addActivity("复制: " + srcFile.getName() + " → " + chosen.getAbsolutePath());
+                refreshCurrentDirectory();
+            }))
+            .exceptionally(e -> {
+                Platform.runLater(() -> {
+                    setBusy(false, "复制失败");
+                    showAlert("复制失败", cleanError(e));
                 });
-        });
+                return null;
+            });
     }
 
     private void promptAndMove(String source) {
-        TextInputDialog dialog = new TextInputDialog(source);
-        styleDialog(dialog.getDialogPane());
-        dialog.setTitle("移动文件");
-        dialog.setHeaderText("移动: " + new File(source).getName());
-        dialog.setContentText("目标路径:");
-        dialog.showAndWait().ifPresent(dest -> {
-            setBusy(true, "移动中...");
-            fileClient.moveFile(source, dest)
-                .thenAccept(fi -> Platform.runLater(() -> {
-                    setBusy(false, "已移动: " + dest);
-                    addActivity("Move: " + new File(source).getName());
-                    refreshCurrentDirectory();
-                }))
-                .exceptionally(e -> {
-                    Platform.runLater(() -> {
-                        setBusy(false, "移动失败");
-                        showAlert("错误", cleanError(e));
-                    });
-                    return null;
+        File srcFile = new File(source);
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("选择移动目标文件夹 — " + srcFile.getName());
+        File startDir = srcFile.getParentFile();
+        if (startDir != null && startDir.isDirectory()) {
+            chooser.setInitialDirectory(startDir);
+        } else if (currentDirectory != null) {
+            chooser.setInitialDirectory(new File(currentDirectory));
+        } else {
+            chooser.setInitialDirectory(new File(USER_HOME));
+        }
+        File chosen = chooser.showDialog(root.getScene().getWindow());
+        if (chosen == null) return;
+
+        String dest = new File(chosen, srcFile.getName()).getAbsolutePath();
+        // If destination equals source, nothing to do
+        if (dest.equals(source)) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            styleDialog(alert.getDialogPane());
+            alert.setTitle("移动失败");
+            alert.setHeaderText(null);
+            alert.setContentText("目标文件夹与源文件夹相同，文件无需移动。");
+            alert.show();
+            return;
+        }
+        // If destination file already exists, ask for overwrite
+        if (new File(dest).exists()) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            styleDialog(confirm.getDialogPane());
+            confirm.setTitle("文件已存在");
+            confirm.setHeaderText("目标位置已存在同名文件: " + srcFile.getName());
+            confirm.setContentText("是否覆盖?\n\n目标: " + dest);
+            boolean overwrite = confirm.showAndWait().map(r -> r == ButtonType.OK).orElse(false);
+            if (!overwrite) return;
+        }
+
+        final String target = dest;
+        setBusy(true, "移动中...");
+        fileClient.moveFile(source, target)
+            .thenAccept(fi -> Platform.runLater(() -> {
+                setBusy(false, "已移动到: " + chosen.getAbsolutePath());
+                addActivity("移动: " + srcFile.getName() + " → " + chosen.getAbsolutePath());
+                refreshCurrentDirectory();
+            }))
+            .exceptionally(e -> {
+                Platform.runLater(() -> {
+                    setBusy(false, "移动失败");
+                    showAlert("移动失败", cleanError(e));
                 });
-        });
+                return null;
+            });
     }
 
     private void promptAndRename(String path) {
@@ -824,7 +946,7 @@ public class MainWindow {
             fileClient.renameFile(path, newName)
                 .thenAccept(fi -> Platform.runLater(() -> {
                     setBusy(false, "已重命名: " + fi.getName());
-                    addActivity("Rename: " + fi.getName());
+                    addActivity("重命名: " + fi.getName());
                     refreshCurrentDirectory();
                 }))
                 .exceptionally(e -> {
@@ -849,7 +971,7 @@ public class MainWindow {
                 fileClient.deleteFile(path)
                     .thenRun(() -> Platform.runLater(() -> {
                         setBusy(false, "已删除: " + new File(path).getName());
-                        addActivity("Delete: " + new File(path).getName());
+                        addActivity("删除: " + new File(path).getName());
                         refreshCurrentDirectory();
                     }))
                     .exceptionally(e -> {
@@ -867,43 +989,199 @@ public class MainWindow {
         tagClient.listTags()
             .thenAccept(tags -> Platform.runLater(() -> {
                 if (tags.isEmpty()) {
-                    showAlert("标签功能不可用", "后端目前只提供标签列表/创建/修改/删除接口，没有提供“把标签绑定到文件”的 API。\n\n因此前端不能真正给文件打标签。这个属于后端功能缺口，本次不改后端。");
+                    showAlert("没有可用标签",
+                        "未找到任何标签。请先通过 Swagger UI 或 API 创建标签。\n\n"
+                        + "POST /api/tags  请求体: {\"name\": \"重要\", \"color\": \"#FF5722\"}");
                     return;
                 }
                 List<String> tagNames = tags.stream().map(TagDTO::getName).toList();
                 ChoiceDialog<String> dialog = new ChoiceDialog<>(tagNames.get(0), tagNames);
                 styleDialog(dialog.getDialogPane());
                 dialog.setTitle("选择标签");
-                dialog.setHeaderText("后端暂未提供文件-标签绑定接口");
-                dialog.setContentText("只能查看已有标签，不能真正保存到文件:");
+                dialog.setHeaderText("为文件添加标签: " + fi.getName());
+                dialog.setContentText("选择标签:");
                 dialog.showAndWait().ifPresent(selected -> {
-                    setBusy(false, "标签未保存: 后端缺少绑定接口");
-                    addActivity("标签未保存: 后端缺少绑定接口");
-                    showAlert("标签未保存", "已选择标签 “" + selected + "”，但后端没有文件-标签绑定 API，所以无法保存。");
+                    TagDTO selectedTag = tags.stream()
+                        .filter(t -> t.getName().equals(selected))
+                        .findFirst().orElse(null);
+                    if (selectedTag == null || selectedTag.getId() == null) {
+                        showAlert("错误", "未找到标签: " + selected);
+                        return;
+                    }
+                    setBusy(true, "绑定标签: " + selected + " -> " + fi.getName());
+                    tagClient.bindFileToTag(selectedTag.getId(), fi.getPath())
+                        .thenAccept(result -> Platform.runLater(() -> {
+                            setBusy(false, "标签已绑定: " + selected);
+                            addActivity("标签: " + selected + " -> " + fi.getName());
+                        }))
+                        .exceptionally(e -> {
+                            Platform.runLater(() -> {
+                                setBusy(false, "标签绑定失败");
+                                String reason = cleanError(e);
+                                if (reason.contains("not indexed")) {
+                                    showAlert("标签绑定失败",
+                                        "文件尚未索引。请先索引目录。\n\n"
+                                        + "原因: " + reason);
+                                } else {
+                                    showAlert("标签绑定失败", reason);
+                                }
+                            });
+                            return null;
+                        });
                 });
             }))
             .exceptionally(e -> {
-                Platform.runLater(() -> showAlert("标签加载失败", cleanError(e)));
+                Platform.runLater(() -> showAlert("Tag loading failed", cleanError(e)));
                 return null;
             });
     }
 
+
     private void showTagManager() {
+        setBusy(true, "加载标签列表...");
         tagClient.listTags()
             .thenAccept(tags -> Platform.runLater(() -> {
-                StringBuilder sb = new StringBuilder();
-                for (TagDTO t : tags) {
-                    sb.append(t.getName());
-                    if (t.getColor() != null) sb.append("  [").append(t.getColor()).append("]");
-                    if (t.getFileCount() != null) sb.append("  ").append(t.getFileCount()).append(" files");
-                    sb.append("\n");
+                setBusy(false, "标签列表已加载");
+                javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
+                styleDialog(dialog.getDialogPane());
+                dialog.setTitle("标签管理");
+                dialog.setHeaderText("所有标签 — 共 " + tags.size() + " 个");
+                dialog.getDialogPane().setPrefWidth(520);
+                dialog.getDialogPane().setPrefHeight(400);
+                dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+                VBox listBox = new VBox(6);
+                listBox.setPadding(new Insets(8));
+
+                if (tags.isEmpty()) {
+                    Label emptyLabel = new Label("暂无标签。\n\n通过 POST /api/tags 创建标签，然后右键点击已索引的文件来绑定标签。");
+                    emptyLabel.getStyleClass().add("hint-text");
+                    emptyLabel.setWrapText(true);
+                    listBox.getChildren().add(emptyLabel);
+                } else {
+                    for (TagDTO t : tags) {
+                        HBox row = new HBox(10);
+                        row.setAlignment(Pos.CENTER_LEFT);
+                        row.setPadding(new Insets(6, 10, 6, 10));
+                        row.getStyleClass().add("tag-row");
+
+                        // Color dot
+                        Circle dot = new Circle(6);
+                        String tagColor = (t.getColor() != null) ? t.getColor() : "#3B82F6";
+                        dot.setFill(Color.web(tagColor));
+
+                        // Tag name
+                        Label nameLabel = new Label(t.getName());
+                        nameLabel.getStyleClass().add("bold-text");
+                        nameLabel.setMinWidth(120);
+
+                        // File count
+                        int fc = (t.getFileCount() != null) ? t.getFileCount() : 0;
+                        Label countLabel = new Label(fc + " 个文件");
+                        countLabel.getStyleClass().add("hint-text");
+
+                        Region spacer = new Region();
+                        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+                        // View files button
+                        Button viewBtn = new Button("查看文件");
+                        viewBtn.getStyleClass().add("small-button");
+                        viewBtn.setOnAction(ev -> showTagFilesDialog(t));
+
+                        row.getChildren().addAll(dot, nameLabel, countLabel, spacer, viewBtn);
+                        listBox.getChildren().add(row);
+                    }
                 }
-                if (tags.isEmpty()) sb.append("暂无标签。\n\n后端支持标签 CRUD，但当前没有文件-标签绑定接口。");
-                else sb.append("\n说明：后端当前没有提供把标签绑定到文件的 API。");
-                showAlert("标签列表", sb.toString());
+
+                javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(listBox);
+                scrollPane.setFitToWidth(true);
+                scrollPane.getStyleClass().add("edge-to-edge");
+                dialog.getDialogPane().setContent(scrollPane);
+                dialog.showAndWait();
             }))
             .exceptionally(e -> {
-                Platform.runLater(() -> showAlert("标签加载失败", cleanError(e)));
+                Platform.runLater(() -> {
+                    setBusy(false, "标签加载失败");
+                    showAlert("标签加载失败", cleanError(e));
+                });
+                return null;
+            });
+    }
+
+    /** Show files bound to a specific tag in a dialog */
+    private void showTagFilesDialog(TagDTO tag) {
+        setBusy(true, "加载标签文件: " + tag.getName());
+        tagClient.getFilesForTag(tag.getId())
+            .thenAccept(files -> Platform.runLater(() -> {
+                setBusy(false, "已加载 " + files.size() + " 个文件");
+
+                javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
+                styleDialog(dialog.getDialogPane());
+                dialog.setTitle("标签: " + tag.getName());
+                String colorInfo = (tag.getColor() != null) ? "  [" + tag.getColor() + "]" : "";
+                dialog.setHeaderText("标签「" + tag.getName() + "」" + colorInfo + " — " + files.size() + " 个文件");
+                dialog.getDialogPane().setPrefWidth(620);
+                dialog.getDialogPane().setPrefHeight(420);
+                dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+                VBox listBox = new VBox(4);
+                listBox.setPadding(new Insets(8));
+
+                if (files.isEmpty()) {
+                    Label emptyLabel = new Label("此标签下暂无文件。\n\n右键点击已索引的文件，选择「添加标签...」来绑定文件到此标签。");
+                    emptyLabel.getStyleClass().add("hint-text");
+                    emptyLabel.setWrapText(true);
+                    listBox.getChildren().add(emptyLabel);
+                } else {
+                    // Header row
+                    HBox header = new HBox(10);
+                    header.getStyleClass().add("tag-table-header");
+                    Label nameHdr = new Label("文件名");
+                    nameHdr.getStyleClass().add("bold-text");
+                    nameHdr.setMinWidth(200);
+                    Label pathHdr = new Label("路径");
+                    pathHdr.getStyleClass().add("hint-text");
+                    pathHdr.setMinWidth(280);
+                    Label sizeHdr = new Label("大小");
+                    sizeHdr.getStyleClass().add("hint-text");
+                    sizeHdr.setMinWidth(80);
+                    header.getChildren().addAll(nameHdr, pathHdr, sizeHdr);
+                    listBox.getChildren().add(header);
+
+                    for (var f : files) {
+                        HBox row = new HBox(10);
+                        row.setAlignment(Pos.CENTER_LEFT);
+                        row.setPadding(new Insets(4, 10, 4, 10));
+                        row.getStyleClass().add("file-detail-row");
+
+                        Label nameLabel = new Label(nullToDash(f.getName()));
+                        nameLabel.setMinWidth(200);
+                        nameLabel.getStyleClass().add("file-name-label");
+
+                        Label pathLabel = new Label(nullToDash(f.getPath()));
+                        pathLabel.setMinWidth(280);
+                        pathLabel.getStyleClass().add("mono-label");
+
+                        Label sizeLabel = new Label(formatFileSize(f.getSizeBytes()));
+                        sizeLabel.setMinWidth(80);
+                        sizeLabel.getStyleClass().add("hint-text");
+
+                        row.getChildren().addAll(nameLabel, pathLabel, sizeLabel);
+                        listBox.getChildren().add(row);
+                    }
+                }
+
+                javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(listBox);
+                scrollPane.setFitToWidth(true);
+                scrollPane.getStyleClass().add("edge-to-edge");
+                dialog.getDialogPane().setContent(scrollPane);
+                dialog.showAndWait();
+            }))
+            .exceptionally(e -> {
+                Platform.runLater(() -> {
+                    setBusy(false, "标签文件加载失败");
+                    showAlert("标签文件加载失败", cleanError(e));
+                });
                 return null;
             });
     }
@@ -914,16 +1192,16 @@ public class MainWindow {
         if (fi == null) {
             selectionNameLabel.setText("选择一个文件");
             selectionMetaLabel.setText("双击目录进入，右键执行文件操作");
-            selectionPathLabel.setText("Path: -");
-            selectionHashLabel.setText("Hash: -");
+            selectionPathLabel.setText("路径: -");
+            selectionHashLabel.setText("哈希: -");
             return;
         }
         selectionNameLabel.setText(nullToDash(fi.getName()));
-        selectionMetaLabel.setText((Boolean.TRUE.equals(fi.getIsDirectory()) ? "Directory" : "File")
+        selectionMetaLabel.setText((Boolean.TRUE.equals(fi.getIsDirectory()) ? "目录" : "文件")
             + " · " + formatExtension(fi)
             + " · " + formatFileSize(fi.getSizeBytes()));
-        selectionPathLabel.setText("Path: " + nullToDash(fi.getPath()));
-        selectionHashLabel.setText("Hash: " + nullToDash(shortHash(fi.getContentHash())));
+        selectionPathLabel.setText("路径: " + nullToDash(fi.getPath()));
+        selectionHashLabel.setText("哈希: " + nullToDash(shortHash(fi.getContentHash())));
         pulseNode(selectionNameLabel);
     }
 
@@ -951,7 +1229,7 @@ public class MainWindow {
             empty.getStyleClass().add("hint-text");
             largestFilesBox.getChildren().add(empty);
         }
-        addActivity("Stats refreshed.");
+        addActivity("统计数据已刷新");
     }
 
     private void onFileChangeEvent(String json) {
@@ -1154,7 +1432,7 @@ public class MainWindow {
         try {
             if (Desktop.isDesktopSupported()) {
                 Desktop.getDesktop().open(new File(path));
-                addActivity("Open: " + new File(path).getName());
+                addActivity("打开: " + new File(path).getName());
             }
         } catch (IOException | IllegalArgumentException e) {
             showAlert("打开失败", e.getMessage());
@@ -1231,7 +1509,7 @@ public class MainWindow {
     private String summarizeDirectory(List<FileInfo> files) {
         long dirs = files.stream().filter(f -> Boolean.TRUE.equals(f.getIsDirectory())).count();
         long regular = files.size() - dirs;
-        return dirs + " dirs / " + regular + " files";
+        return dirs + " 个目录 / " + regular + " 个文件";
     }
 
     private String summarizeDuplicateResult(Object result) {
@@ -1250,9 +1528,9 @@ public class MainWindow {
     }
 
     private String formatExtension(FileInfo fi) {
-        if (Boolean.TRUE.equals(fi.getIsDirectory())) return "folder";
+        if (Boolean.TRUE.equals(fi.getIsDirectory())) return "目录";
         String ext = fi.getExtension();
-        return ext == null || ext.isBlank() ? "file" : ext;
+        return ext == null || ext.isBlank() ? "文件" : ext;
     }
 
     private String formatFileSize(long bytes) {
@@ -1270,9 +1548,6 @@ public class MainWindow {
 
     private String explainIndexError(String message) {
         String detail = message == null ? "" : message;
-        if (detail.contains("AccessDeniedException") || detail.contains("拒绝访问") || detail.contains("My Music")) {
-            return "后端索引目录时遇到了无权限访问的系统目录，当前后端会直接返回失败。\n\n这属于后端 IndexService 遍历策略问题：它应该跳过不可访问目录，而不是让整个索引失败。\n\n原始错误: " + detail;
-        }
         if (detail.contains("HTTP 415")) {
             return "后端要求 POST 请求带 JSON Content-Type。前端已经按 application/json 发送；如果仍出现 415，属于后端请求声明或网关转发问题。\n\n原始错误: " + detail;
         }
